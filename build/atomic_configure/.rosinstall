@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/devel/setup.sh
