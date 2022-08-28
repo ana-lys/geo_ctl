@@ -1,15 +1,9 @@
-# geometric_controller
-
-Trajectory trackking controller using [mavros](https://github.com/mavlink/mavros) package in PX4 OFFBOARD mode. This is a implementation of a geometric controller and differentially flat system considering rotor drag
-
-## Overview
-Trajectory trackking controller using [mavros](https://github.com/mavlink/mavros) package in PX4 OFFBOARD mode. This is a implementation of a geometric controller and differentially flat system considering rotor drag
-
-[![Hovering done](https://img.youtube.com/vi/FRaPGjX9m-c/0.jpg)](https://youtu.be/FRaPGjX9m-c "Hovering done")
+# geometric_controller from mavros_controller of Jaeyoung Lim
+now with auto thrust constant detector
 
 ## Parameters
-- /geometric_controller/mavname (default: "iris")
-- /geometric_controller/ctrl_mode (default: MODE_BODYRATE)
+- /geometric_controller/mavname (default: "iris/solo")
+- /geometric_controller/ctrl_mode (default: ERR_GMTRIC)
 - /geometric_controller/enable_sim (default: true)
 - /geometric_controller/enable_gazebo_state (default: false)
 - /geometric_controller/max_acc (default: 7.0)
@@ -17,17 +11,14 @@ Trajectory trackking controller using [mavros](https://github.com/mavlink/mavros
 - /geometric_controller/drag_dx (default: 0.0)
 - /geometric_controller/drag_dy (default: 0.0)
 - /geometric_controller/drag_dz (default: 0.0)
-- /geometric_controller/attctrl_constant (default: 0.2)
-- /geometric_controller/normalizedthrust_constant (default: 0.1)
+- /geometric_controller/KRP,KYAW (default: 0.2)
+- /geometric_controller/normalizedthrust_constant (auto collected)
 
 
 ## Topics
 
-The geometric controller publishes and subscribes the following topics.
-
 - Published Topics
-	- command/bodyrate_command ( [mavros_msgs/AttitudeTarget](http://docs.ros.org/api/mavros_msgs/html/msg/AttitudeTarget.html) )
-	- reference/pose ( [geometry_msgs/PoseStamped](http://docs.ros.org/kinetic/api/geometry_msgs/html/msg/PoseStamped.html) )
+	- command/bodyrate_command ( [mavros_msgs/AttitudeTarget](http://docs.ros.org/api/mavros_msgs/html/msg/AttitudeTarget.html) 
 
 - Subscribed Topics
 	- reference/setpoint ( [geometry_msgs/TwistStamped](http://docs.ros.org/api/geometry_msgs/html/msg/TwistStamped.html) )
