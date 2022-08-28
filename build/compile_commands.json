@@ -19,24 +19,6 @@
 
 {
   "directory": "/home/analys/geo_ws/src/mavros_controllers/geometric_controller/build",
-  "command": "/usr/bin/c++  -DROSCONSOLE_BACKEND_LOG4CXX -DROS_BUILD_SHARED_LIBS=1 -DROS_PACKAGE_NAME=\\\"geometric_controller\\\" -Idevel/include -I../include -I/home/analys/catkin_ws/devel/.private/geographic_msgs/include -I/home/analys/catkin_ws/devel/.private/uuid_msgs/include -I/home/analys/catkin_ws/devel/include -I/home/analys/catkin_ws/devel/.private/mavros_msgs/include -I/home/analys/catkin_ws/src/mavros/libmavconn/include -I/home/analys/catkin_ws/src/mavros/mavros_msgs/include -I/home/analys/catkin_ws/src/mavros/mavros/include -I/opt/ros/noetic/include -I/opt/ros/noetic/share/xmlrpcpp/cmake/../../../include/xmlrpcpp -I/usr/include/eigen3 -isystem /usr/src/googletest/googletest/include -isystem /usr/src/googletest/googletest  -g   -std=c++11 -DGTEST_HAS_PTHREAD=1 -o CMakeFiles/geometric_controller-test.dir/test/main.cpp.o -c /home/analys/geo_ws/src/mavros_controllers/geometric_controller/test/main.cpp",
-  "file": "/home/analys/geo_ws/src/mavros_controllers/geometric_controller/test/main.cpp"
-},
-
-{
-  "directory": "/home/analys/geo_ws/src/mavros_controllers/geometric_controller/build",
-  "command": "/usr/bin/c++  -DROSCONSOLE_BACKEND_LOG4CXX -DROS_BUILD_SHARED_LIBS=1 -DROS_PACKAGE_NAME=\\\"geometric_controller\\\" -Idevel/include -I../include -I/home/analys/catkin_ws/devel/.private/geographic_msgs/include -I/home/analys/catkin_ws/devel/.private/uuid_msgs/include -I/home/analys/catkin_ws/devel/include -I/home/analys/catkin_ws/devel/.private/mavros_msgs/include -I/home/analys/catkin_ws/src/mavros/libmavconn/include -I/home/analys/catkin_ws/src/mavros/mavros_msgs/include -I/home/analys/catkin_ws/src/mavros/mavros/include -I/opt/ros/noetic/include -I/opt/ros/noetic/share/xmlrpcpp/cmake/../../../include/xmlrpcpp -I/usr/include/eigen3 -isystem /usr/src/googletest/googletest/include -isystem /usr/src/googletest/googletest  -g   -std=c++11 -DGTEST_HAS_PTHREAD=1 -o CMakeFiles/geometric_controller-test.dir/test/test_example.cpp.o -c /home/analys/geo_ws/src/mavros_controllers/geometric_controller/test/test_example.cpp",
-  "file": "/home/analys/geo_ws/src/mavros_controllers/geometric_controller/test/test_example.cpp"
-},
-
-{
-  "directory": "/home/analys/geo_ws/src/mavros_controllers/geometric_controller/build",
-  "command": "/usr/bin/c++  -DROSCONSOLE_BACKEND_LOG4CXX -DROS_BUILD_SHARED_LIBS=1 -DROS_PACKAGE_NAME=\\\"geometric_controller\\\" -Idevel/include -I../include -I/home/analys/catkin_ws/devel/.private/geographic_msgs/include -I/home/analys/catkin_ws/devel/.private/uuid_msgs/include -I/home/analys/catkin_ws/devel/include -I/home/analys/catkin_ws/devel/.private/mavros_msgs/include -I/home/analys/catkin_ws/src/mavros/libmavconn/include -I/home/analys/catkin_ws/src/mavros/mavros_msgs/include -I/home/analys/catkin_ws/src/mavros/mavros/include -I/opt/ros/noetic/include -I/opt/ros/noetic/share/xmlrpcpp/cmake/../../../include/xmlrpcpp -I/usr/include/eigen3 -isystem /usr/src/googletest/googletest/include -isystem /usr/src/googletest/googletest  -g   -std=c++11 -DGTEST_HAS_PTHREAD=1 -o CMakeFiles/geometric_controller-test.dir/test/geometric_controller-test.cpp.o -c /home/analys/geo_ws/src/mavros_controllers/geometric_controller/test/geometric_controller-test.cpp",
-  "file": "/home/analys/geo_ws/src/mavros_controllers/geometric_controller/test/geometric_controller-test.cpp"
-},
-
-{
-  "directory": "/home/analys/geo_ws/src/mavros_controllers/geometric_controller/build",
   "command": "/usr/bin/c++  -DGTEST_CREATE_SHARED_LIBRARY=1 -Dgmock_main_EXPORTS -isystem /usr/src/googletest/googlemock/include -isystem /usr/src/googletest/googlemock -isystem /usr/src/googletest/googletest/include -isystem /usr/src/googletest/googletest  -g -fPIC   -std=c++11 -Wall -Wshadow -Wno-error=dangling-else -DGTEST_HAS_PTHREAD=1 -fexceptions -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -DGTEST_HAS_PTHREAD=1 -std=c++11 -o gtest/googlemock/CMakeFiles/gmock_main.dir/src/gmock_main.cc.o -c /usr/src/googletest/googlemock/src/gmock_main.cc",
   "file": "/usr/src/googletest/googlemock/src/gmock_main.cc"
 },

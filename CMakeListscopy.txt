@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.12)
-project(geometric_controller)
+project(recorder)
 
 add_definitions(-std=c++11)
 
@@ -20,7 +20,7 @@ generate_dynamic_reconfigure_options(
 
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES geometric_controller
+  LIBRARIES recorder
   CATKIN_DEPENDS roscpp rospy std_msgs mavros_msgs geometry_msgs sensor_msgs tf
 )
 
@@ -43,13 +43,10 @@ target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})
 ############
 # BINARIES #
 ############
-add_executable(geometric_controller_node
+add_executable(recorder_node
   src/geometric_controller_node.cpp
 )
-add_executable(land
-  src/land.cpp
-)
-add_dependencies(geometric_controller_node geometric_controller ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-target_link_libraries(geometric_controller_node ${PROJECT_NAME} ${catkin_LIBRARIES})
-target_link_libraries(land ${PROJECT_NAME} ${catkin_LIBRARIES})
+add_dependencies(recorder_node geometric_controller ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+target_link_libraries(recorder_node ${PROJECT_NAME} ${catkin_LIBRARIES})

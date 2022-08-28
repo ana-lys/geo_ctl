@@ -1,0 +1,8 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/analys/geo_ws/devel/lib/python3/dist-packages",
+        "/home/analys/TM_motor/devel/lib/python3/dist-packages",
+        "/home/analys/catkin_ws/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages"
+    ]
+}

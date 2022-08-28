@@ -75,7 +75,9 @@ geometricCtrl::geometricCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &n
   batterySub_= nh_.subscribe("mavros/battery", 1, &geometricCtrl::batteryCallback, this,
                               ros::TransportHints().tcpNoDelay());
   global_poseSub_= nh_.subscribe("mavros/global_position/local", 1, &geometricCtrl::globalCallback, this,
-                               ros::TransportHints().tcpNoDelay());     
+                               ros::TransportHints().tcpNoDelay());
+  load_ground_truthSub_= nh_.subscribe("/load_ground_truth", 1, &geometricCtrl::loadgroundtruth_callback, this,
+                               ros::TransportHints().tcpNoDelay());      
   ImuPmarker_pub = nh_.advertise<visualization_msgs::Marker>( "/ImuP_marker", 0 );
   angularVelPub_ = nh_.advertise<mavros_msgs::AttitudeTarget>("command/bodyrate_command", 1);
   referencePosePub_ = nh_.advertise<geometry_msgs::PoseStamped>("reference/pose", 1);
@@ -86,11 +88,15 @@ geometricCtrl::geometricCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &n
   set_mode_client_ = nh_.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
   land_service_ = nh_.advertiseService("land", &geometricCtrl::landCallback, this);
   imuSub_ = nh_.subscribe("/mavros/imu/data",1,&geometricCtrl::imuCallback, this,
+                              ros::TransportHints().tcpNoDelay());
+  imu_physicalSub_ = nh_.subscribe("/Imu_load_stm32",1,&geometricCtrl::imuphysicalCallback, this,
                               ros::TransportHints().tcpNoDelay());                                    
+  imuloadSub_ = nh_.subscribe("/imu_load",1,&geometricCtrl::imuloadCallback, this,
+                              ros::TransportHints().tcpNoDelay());                            
   nh_private_.param<string>("mavname", mav_name_, "iris");
   nh_private_.param<int>("ctrl_mode", ctrl_mode_, ERROR_QUATERNION);
   nh_private_.param<bool>("enable_sim", sim_enable_, true);
-  nh_private_.param<bool>("load_control_", load_control_, false);
+  nh_private_.param<bool>("load_control_", load_control_, true);
   nh_private_.param<bool>("velocity_yaw", velocity_yaw_, false);
   nh_private_.param<double>("max_acc", max_fb_acc_, 9.0);
   nh_private_.param<double>("yaw_heading", mavYaw_, 0.0);
@@ -113,20 +119,17 @@ geometricCtrl::geometricCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &n
   nh_private_.param<double>("init_pos_y", initTargetPos_y_, 0.0);
   nh_private_.param<double>("init_pos_z", initTargetPos_z_, 5.0);
   nh_private_.param<double>("land_vel", Landing_velocity_, 1);
-
+  Kpos_load << - 2.0 , - 2.0 , - 2.0;
+  Kvel_load << - 4.0 , - 4.0 , - 4.0;
   Landing_velocity << 0.0, 0.0, Landing_velocity_*-1.0;
   targetPos_ << initTargetPos_x_, initTargetPos_y_, initTargetPos_z_;  // Initial Position
   targetVel_ << 0.0, 0.0, 0.0;
-  Start_pos << 0.0 ,0.0 , 5.0 ;
-  Start_kpos << -2.0 , -2.0 , -2.0 ;
-  Start_kvel << -6.0 , -6.0 , -6.0 ;
   mavPos_ << 0.0, 0.0, 0.0;
-  mavYaw_ = 0.0 ;
   mavVel_ << 0.0, 0.0, 0.0;
   g_ << 0.0, 0.0, -9.8;
   Kpos_ << -Kpos_x_, -Kpos_y_, -Kpos_z_;
   Kvel_ << -Kvel_x_, -Kvel_y_, -Kvel_z_;
-  load_control_= false;
+  load_control_=true;
   D_ << dx_, dy_, dz_;
   tau << tau_x, tau_y, tau_z;
   Cable_loop =ros::Time::now();
@@ -170,8 +173,73 @@ quat_imu.z()=msg.orientation.z;
 Eigen::Vector3d Imu_accel = quat_imu * Imu_base ;  
 // ROS_INFO_STREAM(Imu_accel+g_<<"imu_base");
 }
-
-
+void geometricCtrl::loadgroundtruth_callback(const nav_msgs::Odometry &msg){
+  Load_pos_gth << msg.pose.pose.position.x , msg.pose.pose.position.y , msg.pose.pose.position.z ;
+  Eigen::Vector3d temp;
+  temp << -0.468285, -0.00529422, -0.258947;
+  Load_pos_gth += temp ;
+  temp << -0.274713, 0 , 0.0498823;
+  Load_pos_gth -= temp ;
+  Load_vel_gth << msg.twist.twist.linear.x , msg.twist.twist.linear.y , msg.twist.twist.linear.z ;
+}
+void geometricCtrl::imuphysicalCallback(const sensor_msgs::Imu &msg){
+double t = ros::Time::now().toSec()-last_physical_load_time.toSec();
+Imup_load_base(0) =msg.linear_acceleration.x;
+Imup_load_base(1) =msg.linear_acceleration.y;
+Imup_load_base(2) =msg.linear_acceleration.z;
+Imup_load_quat.w()=msg.orientation.w;
+Imup_load_quat.x()=msg.orientation.x;
+Imup_load_quat.y()=msg.orientation.y;
+Imup_load_quat.z()=msg.orientation.z;
+Loadp_pos = mavPos_ + Imup_load_quat * Eigen::Vector3d::UnitZ()*-0.33;
+Loadp_vel = (Loadp_pos - Loadp_last_pos )/t;
+Loadp_last_pos = Load_pos;
+last_physical_load_time = ros::Time::now();
+Imup_load_ang_vel(0)= msg.angular_velocity.x;
+Imup_load_ang_vel(1)= msg.angular_velocity.y;
+Imup_load_ang_vel(2)= msg.angular_velocity.z;
+Imup_load_ang_vel = Imup_load_quat * Imup_load_ang_vel;
+Loadp_accel = Imup_load_quat * Imup_load_base ;
+visualization_msgs::Marker marker;
+marker.header.frame_id = "map";
+marker.header.stamp = ros::Time();
+marker.ns = "my_namespace";
+marker.id = 0;
+marker.type = visualization_msgs::Marker::ARROW;
+marker.action = visualization_msgs::Marker::ADD;
+marker.pose.position.x = Loadp_pos(0);
+marker.pose.position.y = Loadp_pos(1);
+marker.pose.position.z = Loadp_pos(2);
+marker.pose.orientation.x = msg.orientation.x;
+marker.pose.orientation.y = msg.orientation.y;
+marker.pose.orientation.z = msg.orientation.z;
+marker.pose.orientation.w = msg.orientation.w;
+marker.scale.x = 1;
+marker.scale.y = 0.1;
+marker.scale.z = 0.1;
+marker.color.a = 1.0; // Don't forget to set the alpha!
+marker.color.r = 1.0;
+marker.color.g = 1.0;
+marker.color.b = 0.0;
+ImuPmarker_pub.publish( marker );
+}
+void geometricCtrl::imuloadCallback(const sensor_msgs::Imu &msg){
+double t = ros::Time::now().toSec()-last_load_time.toSec();
+Imu_load_base(0) =msg.linear_acceleration.x;
+Imu_load_base(1) =msg.linear_acceleration.y;
+Imu_load_base(2) =msg.linear_acceleration.z;
+Imu_load_quat.w()=msg.orientation.w;
+Imu_load_quat.x()=msg.orientation.x;
+Imu_load_quat.y()=msg.orientation.y;
+Imu_load_quat.z()=msg.orientation.z;
+Load_accel = Imu_load_quat * Imu_load_base + g_ ;
+Eigen::Vector3d relative = Imu_load_quat * Eigen::Vector3d::UnitZ() * 0.4;
+ROS_INFO_STREAM("line"<<relative(0)<<" "<<relative(1)<<" "<<relative(2));
+Load_pos = mavPos_ - relative ;
+Load_vel = (Load_pos - Load_last_pos )/t;
+Load_last_pos = Load_pos;
+last_load_time = ros::Time::now();
+}
 void geometricCtrl::globalCallback(const nav_msgs::Odometry &msg){
     globalPos_ = toEigen(msg.pose.pose.position);
     //ROS_INFO_STREAM("global_position"<< globalPos_(0)<<" "<< globalPos_(1)<<" "<< globalPos_(2));
@@ -280,18 +348,18 @@ void geometricCtrl::mavtwistCallback(const geometry_msgs::TwistStamped &msg) {
 }
 
 bool geometricCtrl::landCallback(std_srvs::SetBool::Request &request, std_srvs::SetBool::Response &response) {
-  // last_landing_request = ros::Time::now();
-  // last_landing_command = ros::Time::now();
-  // if(request.data == true)
-  // landing_detected = true ;
-  // else landing_detected = false ;
-  // ROS_INFO_STREAM("landing _detected"<<landing_detected);
-  // node_state = LANDING;
-  // last_detected_pos = mavPos_;
-  // landing_pos = mavPos_;
-  // landing_vel = mavVel_;
-  // Landing_last_horizontal_error = horizontal_part(mavPos_)- Eigen::Vector3d::Zero();
-  // return true;
+  last_landing_request = ros::Time::now();
+  last_landing_command = ros::Time::now();
+  if(request.data == true)
+  landing_detected = true ;
+  else landing_detected = false ;
+  ROS_INFO_STREAM("landing _detected"<<landing_detected);
+  node_state = LANDING;
+  last_detected_pos = mavPos_;
+  landing_pos = mavPos_;
+  landing_vel = mavVel_;
+  Landing_last_horizontal_error = horizontal_part(mavPos_)- Eigen::Vector3d::Zero();
+  return true;
 }
 
 void geometricCtrl::cmdloopCallback(const ros::TimerEvent &event) {
@@ -299,28 +367,95 @@ void geometricCtrl::cmdloopCallback(const ros::TimerEvent &event) {
     case WAITING_FOR_HOME_POSE:
       waitForPredicate(&received_home_pose, "Waiting for home pose...");
       ROS_INFO("Got pose! Drone Ready to be armed.");
-      loadStartparams();
       if(!load_control_)
-      node_state = START;
+      node_state = MISSION_EXECUTION;
+      else
+      node_state = LOAD_MISSION;
       break;
     case START:{
-      desired_acc = controlPosition(targetPos_, targetVel_, targetAcc_);
+      if(mavVel_.norm()>0.1 && done_thrust_calib == false){
+      done_thrust_calib = true;
+      desired_acc << 0 , 0 ,-1;
+      }
+      if(done_thrust_calib == false){
+      desired_acc << 0,0,5;
+      thrust_start += 0.005;
       computeBodyRateCmd(cmdBodyRate_, desired_acc);
+      cmdBodyRate_(3) = thrust_start;
+      }
+      else {
+      computeBodyRateCmd(cmdBodyRate_, desired_acc);
+      }
       pubRateCommands(cmdBodyRate_, q_des);
-      ascending_thrust();
-      if(check_cross()== 1){
-      loadFlyparams();
+      ROS_INFO_STREAM("THRUST CALIBRATION"<<cmdBodyRate_(3));
+      if(mavVel_.norm()<0.01 && mavPos_(3)<0.01 && done_thrust_calib == true){
+      ROS_INFO_STREAM("Thrust calibrated"<< thrust_start);
       node_state = MISSION_EXECUTION;
       }
       break;
     }
     case MISSION_EXECUTION: {
-      // if(current_state_.mode != "OFFBOARD" || !current_state_.armed) break;
       desired_acc = controlPosition(targetPos_, targetVel_, targetAcc_);
       computeBodyRateCmd(cmdBodyRate_, desired_acc);
       pubRateCommands(cmdBodyRate_, q_des);
+
       break;
-    } 
+    }
+     case LOAD_MISSION: {
+      Eigen::Vector3d Load_des_acc = control_Load_Position(targetPos_, targetVel_, targetAcc_);
+      computeLoadQuatCmd(Load_des_acc);    
+      computeCableCmd(Load_des_acc);
+      computeBodyRateCmd(cmdBodyRate_, desired_acc);
+      pubRateCommands(cmdBodyRate_, q_des);
+       double time = (ros::Time::now() -Flight_start).toSec();
+      updates(time,targetPos_(0),targetPos_(1),targetPos_(2),Load_pos(0),Load_pos(1),Load_pos(2),mavPos_(0),mavPos_(1),mavPos_(2),Load_pos_gth(0),Load_pos_gth(1),Load_pos_gth(2),Load_vel_gth(0),Load_vel_gth(1),Load_vel_gth(2),Load_vel(0),Load_vel(1),Load_vel(2),0);
+      break; 
+}
+
+    case LANDING: {
+      
+      Eigen::Vector3d landing_pos_horizontal = horizontal_part(landing_pos); 
+      Eigen::Vector3d marker_horizontal =Eigen::Vector3d::Zero(); ;
+      Eigen::Vector3d error_horizontal = marker_horizontal - landing_pos_horizontal ;
+      Eigen::Vector3d error_axis;
+      Eigen::Vector3d error_velocity ;
+
+      // IF MARKER NOT DETECTED increases the height by 0.5 for evert 4 sec, max + 5m
+      if(landing_detected == 0){ 
+        int high_offset =  std::min((int)(ros::Time::now().toSec()-last_landing_request.toSec())/4,10);
+        error_velocity = -Landing_velocity -landing_vel + last_detected_pos- landing_pos + Eigen::Vector3d(0,0, high_offset*0.5);
+        error_axis = Eigen::Vector3d::Zero();
+      }
+      // IF MARKER DETECTED FLY HORIZONTALY to marker_axis , horizontal_vel = 0.3 m/s
+      else if(error_horizontal.norm()> 0.2 || landing_vel.norm()> 0.2)
+      {
+        error_axis = Eigen::Vector3d::Zero();
+        error_velocity = error_horizontal/error_horizontal.norm()*0.2 -landing_vel;
+      }
+      // IF DRONE REACH MARKER AXIS , START TO LAND (with marker continuing to update)
+      else {
+        error_axis = error_horizontal;
+        error_velocity = Landing_velocity - landing_vel;
+      }
+      // SWITCH TO LANDED at set high
+      if(landing_pos(2)<0.5) targetAcc_ += Eigen::Vector3d(0,0,-0.1)*landing_loop;
+      if(mavVel_.norm()<0.1 && mavPos_(2)< 0.2) node_state = LANDED;
+      targetAcc_(2) = std::max(-2.0,targetAcc_(2));
+
+      // GEOMETRIC_CONTROLLER part (max accelerations = 2.0)
+      Eigen::Vector3d error_landing = error_velocity * 6.0 + error_axis * 4.0 ; 
+      if(error_landing.norm() > 2.0 ) error_landing = error_landing / error_landing.norm() *2.0 ;
+      double landing_loop =  ros::Time::now().toSec()-last_landing_command.toSec();
+      landing_vel += error_landing* landing_loop  ;
+      landing_pos += landing_vel* landing_loop   ;
+      Eigen::Vector3d Load_des_acc = control_Load_Position(targetPos_, targetVel_, targetAcc_);
+      // computeCableCmd(Load_des_acc,);
+      computeBodyRateCmd(cmdBodyRate_, desired_acc);
+      pubRateCommands(cmdBodyRate_, q_des);
+      last_landing_command = ros::Time::now();
+      ros::spinOnce();
+      break;
+    }
     case LANDED:
       ROS_INFO("Landed. Please set to position control and disarm.");
       cmdloop_timer_.stop();
@@ -328,9 +463,7 @@ void geometricCtrl::cmdloopCallback(const ros::TimerEvent &event) {
   }
 }
 
-void geometricCtrl::mavstateCallback(const mavros_msgs::State::ConstPtr &msg) { 
-  current_state_ = *msg;
-  }
+void geometricCtrl::mavstateCallback(const mavros_msgs::State::ConstPtr &msg) { current_state_ = *msg; }
 
 void geometricCtrl::statusloopCallback(const ros::TimerEvent &event) {
   if (sim_enable_) {
@@ -338,15 +471,14 @@ void geometricCtrl::statusloopCallback(const ros::TimerEvent &event) {
     // This will only run if the vehicle is simulated
     arm_cmd_.request.value = true;
     offb_set_mode_.request.custom_mode = "OFFBOARD";
-    if (current_state_.mode != "OFFBOARD" && (ros::Time::now() - last_request_ > ros::Duration(2.0))) {
+    if (current_state_.mode != "OFFBOARD" && (ros::Time::now() - last_request_ > ros::Duration(5.0))) {
       if (set_mode_client_.call(offb_set_mode_) && offb_set_mode_.response.mode_sent) {
         ROS_INFO("Offboard enabled");
       }
       last_request_ = ros::Time::now();
     } else {
-      if (!current_state_.armed && (ros::Time::now() - last_request_ > ros::Duration(2.0))) {
-        arming_client_.call(arm_cmd_);
-        if (arm_cmd_.response.success == true) {
+      if (!current_state_.armed && (ros::Time::now() - last_request_ > ros::Duration(5.0))) {
+        if (arming_client_.call(arm_cmd_) && arm_cmd_.response.success) {
           ROS_INFO("Vehicle armed");
         }
         last_request_ = ros::Time::now();
@@ -405,7 +537,50 @@ Eigen::Vector3d geometricCtrl::controlPosition(const Eigen::Vector3d &target_pos
   Eigen::Vector3d zb = mavAtt_ * Eigen::Vector3d::UnitZ();
   return a_des;
 }
+Eigen::Vector3d geometricCtrl::control_Load_Position(const Eigen::Vector3d &target_pos, const Eigen::Vector3d &target_vel,
+                                               const Eigen::Vector3d &target_acc) {
+  /// Compute BodyRate commands using differential flatness
+  /// Controller based on Faessler 2017
+  const Eigen::Vector3d a_ref = target_acc;
+  if (velocity_yaw_) {
+    mavYaw_ = getVelocityYaw(mavVel_);
+  }
+  const Eigen::Vector3d pos_error = Load_pos - target_pos ;
+  // ROS_INFO_STREAM ("Load_pos: " << Load_pos(0)<< " " << Load_pos(1)<< " " << Load_pos(2));
+  // ROS_INFO_STREAM ("pos_error: " << pos_error(0)*-2<< " " << pos_error(1)*-2<< " " << pos_error(2)*-2);
+  // ROS_INFO_STREAM ("Load_vel "<<Load_vel(0)<< " "<< Load_vel(1)<< " " << Load_vel(2));
+  const Eigen::Vector3d vel_error = Load_vel - target_vel ;
+  // ROS_INFO_STREAM ("vel_error: " << vel_error(0)*-8<< " " << vel_error(1)*-8<< " " << vel_error(2)*-10);
+  // Position Controller
+  const Eigen::Vector3d a_fb = pos_Load_controller(pos_error, vel_error);
+  // ROS_INFO_STREAM ("a_fb "<<a_fb(0)<<" "<< a_fb(1)<<" "<< a_fb(2));
+  // Rotor Drag compensation
+  const Eigen::Vector3d a_rd = Eigen::Vector3d::Zero();
 
+  // Reference acceleration
+  const Eigen::Vector3d a_des = a_fb + a_ref - a_rd - g_;
+  return a_des;
+
+
+}
+void geometricCtrl::computeLoadQuatCmd( const Eigen::Vector3d &a_des) {
+  // Reference attitude
+  double loadYaw_ = 0.0;
+  Eigen::Vector3d x_C = loadYaw_* Eigen::Vector3d::UnitX();
+  Eigen::Vector3d y_C = loadYaw_ * Eigen::Vector3d::UnitY();
+  Eigen::Vector3d z_B;
+  if(a_des.norm()<0.01){
+    z_B = Imu_load_quat * Eigen::Vector3d::UnitZ();
+  }
+  else z_B = a_des.normalized();
+  const Eigen::Vector3d x_B_prototype = y_C.cross(z_B);
+  const Eigen::Vector3d x_B =
+      computeRobustBodyXAxis(x_B_prototype, x_C, y_C, mavAtt_);
+  const Eigen::Vector3d y_B = (z_B.cross(x_B)).normalized();
+  const Eigen::Matrix3d R_W_B((Eigen::Matrix3d() << x_B, y_B, z_B).finished());
+  Eigen::Quaterniond desired_attitude(R_W_B);
+  q_load_des = desired_attitude;
+}
 double geometricCtrl::ToEulerYaw(const Eigen::Quaterniond& q){
     Vector3f angles;    //yaw pitch roll
     const auto x = q.x();
@@ -417,7 +592,6 @@ double geometricCtrl::ToEulerYaw(const Eigen::Quaterniond& q){
     double yaw = std::atan2(siny_cosp, cosy_cosp);
     return yaw;
   }
-
 void geometricCtrl::computeBodyRateCmd(Eigen::Vector4d &bodyrate_cmd, const Eigen::Vector3d &a_des) {
   // Reference attitude
   Eigen::Quaterniond q_heading = Eigen::Quaterniond(
@@ -438,8 +612,18 @@ void geometricCtrl::computeBodyRateCmd(Eigen::Vector4d &bodyrate_cmd, const Eige
   q_des = desired_attitude;
   bodyrate_cmd = geometric_attcontroller(q_des, a_des, mavAtt_);  // Calculate BodyRate
 }
+void geometricCtrl::computeCableCmd(Eigen::Vector3d &a_des) {
+  Eigen::Vector3d z_B;
+  if(a_des.norm()<0.01){
+    z_B = Imu_load_quat * Eigen::Vector3d::UnitZ();
+  }
+  else z_B = a_des.normalized();
 
-
+  Eigen::Vector3d quad_pos_target =  targetPos_+ 0.4 * z_B;
+  Eigen::Vector3d quad_vel_target =  targetVel_ ;
+  desired_acc = controlPosition( quad_pos_target , quad_vel_target , Eigen::Vector3d::Zero());
+  desired_acc +=  a_des/ 3 ;
+} 
 
 Eigen::Vector3d geometricCtrl::computeRobustBodyXAxis(
     const Eigen::Vector3d& x_B_prototype, const Eigen::Vector3d& x_C,
@@ -470,6 +654,15 @@ Eigen::Vector3d geometricCtrl::computeRobustBodyXAxis(
 Eigen::Vector3d geometricCtrl::poscontroller(const Eigen::Vector3d &pos_error, const Eigen::Vector3d &vel_error) {
   Eigen::Vector3d a_fb =
       Kpos_.asDiagonal() * pos_error + Kvel_.asDiagonal() * vel_error;  // feedforward term for trajectory error
+
+  if (a_fb.norm() > max_fb_acc_)
+    a_fb = (max_fb_acc_ / a_fb.norm()) * a_fb;  // Clip acceleration if reference is too large
+
+  return a_fb;
+}
+Eigen::Vector3d geometricCtrl::pos_Load_controller(const Eigen::Vector3d &pos_error, const Eigen::Vector3d &vel_error) {
+  Eigen::Vector3d a_fb =
+      Kpos_load.asDiagonal() * pos_error + Kvel_load.asDiagonal() * vel_error;  // feedforward term for trajectory error
 
   if (a_fb.norm() > max_fb_acc_)
     a_fb = (max_fb_acc_ / a_fb.norm()) * a_fb;  // Clip acceleration if reference is too large
@@ -511,36 +704,6 @@ bool geometricCtrl::ctrltriggerCallback(std_srvs::SetBool::Request &req, std_srv
 bool geometricCtrl::almostZero(double value) {
   if (fabs(value) < 0.01) return true;
   else return false;
-}
-
-void geometricCtrl::loadStartparams(){
-Kpos_ = Start_kpos;
-Kvel_ = Start_kvel;
-targetPos_ = Start_pos;
-krp = krp_start ;
-norm_thrust_const_ = 0.02; 
-}
-
-void geometricCtrl::loadFlyparams(){
-Kpos_ << -Kpos_x_, -Kpos_y_, -Kpos_z_;
-Kvel_ << -Kvel_x_, -Kvel_y_, -Kvel_z_;
-krp = Krp_;
-targetPos_ << initTargetPos_x_, initTargetPos_y_, initTargetPos_z_;
-norm_thrust_const_ = cross_average / 9.8;
-ROS_INFO_STREAM("n_T_const"<<norm_thrust_const_);
-}
-
-void geometricCtrl::ascending_thrust(){
-if(current_state_.mode == "OFFBOARD" && current_state_.armed && (mavPos_(2) < 1.0)) {
-norm_thrust_const_ += 0.00005 ;
-}
-}
-
-int geometricCtrl::check_cross(){
-if( mavPos_(2) < 1.5 ) return -1;
-if( cross_counter >= 30 ){ cross_average = cross_sum / 30.0; return 1;}
-if( fabs(mavVel_(2))< 0.05) {cross_counter ++; cross_sum += cmdBodyRate_(3);}
-return 0;
 }
 void geometricCtrl::dynamicReconfigureCallback(geometric_controller::GeometricControllerConfig &config,
                                                uint32_t level) {
@@ -584,4 +747,3 @@ void geometricCtrl::dynamicReconfigureCallback(geometric_controller::GeometricCo
   kyaw = Kyaw_;
   krp  = Krp_;
 }
-

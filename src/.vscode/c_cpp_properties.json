@@ -1,0 +1,44 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/analys/geo_ws/devel/include/**",
+        "/home/analys/TM_motor/devel/include/**",
+        "/home/analys/catkin_ws/devel/include/**",
+        "/opt/ros/noetic/include/**",
+        "/home/analys/geo_ws/src/mavros_controllers/controller_msgs/include/**",
+        "/home/analys/geo_ws/src/eigen_checks/include/**",
+        "/home/analys/catkin_ws/src/geographic_info/geodesy/include/**",
+        "/home/analys/geo_ws/src/mavros_controllers/geometric_controller/include/**",
+        "/home/analys/catkin_ws/src/mavros/libmavconn/include/**",
+        "/home/analys/geo_ws/src/mav_comm/mav_msgs/include/**",
+        "/home/analys/geo_ws/src/mav_comm/mav_planning_msgs/include/**",
+        "/home/analys/geo_ws/src/mav_trajectory_generation/mav_trajectory_generation/include/**",
+        "/home/analys/geo_ws/src/mav_trajectory_generation/mav_trajectory_generation_example/include/**",
+        "/home/analys/geo_ws/src/mav_trajectory_generation/mav_trajectory_generation_ros/include/**",
+        "/home/analys/geo_ws/src/mav_trajectory_generation/mav_visualization/include/**",
+        "/home/analys/catkin_ws/src/mavros/mavros/include/**",
+        "/home/analys/catkin_ws/src/mavros/mavros_msgs/include/**",
+        "/home/analys/geo_ws/src/mrs_lib/include/**",
+        "/home/analys/geo_ws/src/nlopt/include/**",
+        "/home/analys/geo_ws/src/nlopt_ros/include/**",
+        "/home/analys/geo_ws/src/offboard/include/**",
+        "/home/analys/catkin_ws/src/mavros/test_mavros/include/**",
+        "/home/analys/geo_ws/src/mavros_controllers/trajectory_publisher/include/**",
+        "/home/analys/geo_ws/src/uav_motion/include/**",
+        "/home/analys/catkin_ws/src/unique_identifier/unique_id/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}

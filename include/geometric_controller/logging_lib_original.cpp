@@ -8,7 +8,7 @@ void creates()
 	std::fstream file; 
     name ="/home/analys/rigid_link_log/rigid.csv";
 	file.open(name, std::ios::out | std::ios::app); 
-	file << "TimeStamp,setX,setY,setZ,mavX,mavY,mavZ,velX,velY,velZ,WhyX,WhyY,WhyZ,Arux,Aruy,Aruz,Aprx,Apry,Apryz,Thrust\n";
+	file << "TimeStamp,setX,setY,setZ,loadX,loadY,loadZ,quadX,quadY,quadZ,gtlPx,gtlPy,gtlPz,gtlVx,gtlVy,gtlVz,odoVX,odoVY,odoVZ,Thrust\n";
     file.close(); 
 } 
  
@@ -21,13 +21,13 @@ void updates(double time,
                    double odoVX, double odoVY, double odoVZ,
                    double thrust
                    )
-{
-// {   int time_=floor(time*1000);
-        // if(time_%100 < 8 ){
+
+{   int time_=floor(time*1000);
+        if(time_%100 < 8 ){
 	std::fstream file;  
     file.open(name, std::ios::out | std::ios::app); 
     if(!file.is_open()) cout << "file oppen error";
-    file <<setprecision(2)<<fixed<< time<< ", " 
+    file <<setprecision(2)<<fixed<< time_/1000.0 << ", " 
                          << std::fixed << std::setprecision(8) << errorX << ", " 
 						 << std::fixed << std::setprecision(8) << errorY << ", " 
 						 << std::fixed << std::setprecision(8) << errorZ << ", "
@@ -49,5 +49,5 @@ void updates(double time,
 						 << std::fixed << std::setprecision(8) << thrust<< "\n";
 
 	file.close(); 
-// } 
+} 
 }
