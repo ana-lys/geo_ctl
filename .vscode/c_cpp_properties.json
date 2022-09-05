@@ -31,7 +31,8 @@
                 "/home/analys/geo_ws/src/mavros_controllers/trajectory_publisher/include/**",
                 "/home/analys/geo_ws/src/uav_motion/include/**",
                 "/home/analys/catkin_ws/src/unique_identifier/unique_id/include/**",
-                "/usr/include/**"
+                "/usr/include/**",
+                "/opt/ros/noetic/include"
             ],
             "name": "ROS",
             "intelliSenseMode": "gcc-x64",

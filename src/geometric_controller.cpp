@@ -167,7 +167,7 @@ quat_imu.w()=msg.orientation.w;
 quat_imu.x()=msg.orientation.x;
 quat_imu.y()=msg.orientation.y;
 quat_imu.z()=msg.orientation.z;
-Eigen::Vector3d Imu_accel = quat_imu * Imu_base ;  
+Imu_accel = quat_imu * Imu_base ;  
 // ROS_INFO_STREAM(Imu_accel+g_<<"imu_base");
 }
 
@@ -291,7 +291,7 @@ bool geometricCtrl::landCallback(std_srvs::SetBool::Request &request, std_srvs::
   // landing_pos = mavPos_;
   // landing_vel = mavVel_;
   // Landing_last_horizontal_error = horizontal_part(mavPos_)- Eigen::Vector3d::Zero();
-  // return true;
+  return true;
 }
 
 void geometricCtrl::cmdloopCallback(const ros::TimerEvent &event) {
@@ -308,6 +308,7 @@ void geometricCtrl::cmdloopCallback(const ros::TimerEvent &event) {
       computeBodyRateCmd(cmdBodyRate_, desired_acc);
       pubRateCommands(cmdBodyRate_, q_des);
       ascending_thrust();
+      ROS_INFO_STREAM(Imu_accel(0)<<" "<<Imu_accel(1)<<" "<<Imu_accel(2)<<" ");
       if(check_cross()== 1){
       loadFlyparams();
       node_state = MISSION_EXECUTION;
