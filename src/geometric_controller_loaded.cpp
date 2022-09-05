@@ -373,25 +373,6 @@ void geometricCtrl::cmdloopCallback(const ros::TimerEvent &event) {
       node_state = LOAD_MISSION;
       break;
     case START:{
-      if(mavVel_.norm()>0.1 && done_thrust_calib == false){
-      done_thrust_calib = true;
-      desired_acc << 0 , 0 ,-1;
-      }
-      if(done_thrust_calib == false){
-      desired_acc << 0,0,5;
-      thrust_start += 0.005;
-      computeBodyRateCmd(cmdBodyRate_, desired_acc);
-      cmdBodyRate_(3) = thrust_start;
-      }
-      else {
-      computeBodyRateCmd(cmdBodyRate_, desired_acc);
-      }
-      pubRateCommands(cmdBodyRate_, q_des);
-      ROS_INFO_STREAM("THRUST CALIBRATION"<<cmdBodyRate_(3));
-      if(mavVel_.norm()<0.01 && mavPos_(3)<0.01 && done_thrust_calib == true){
-      ROS_INFO_STREAM("Thrust calibrated"<< thrust_start);
-      node_state = MISSION_EXECUTION;
-      }
       break;
     }
     case MISSION_EXECUTION: {

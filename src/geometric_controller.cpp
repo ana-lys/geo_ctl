@@ -119,7 +119,7 @@ geometricCtrl::geometricCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &n
   targetVel_ << 0.0, 0.0, 0.0;
   Start_pos << 0.0 ,0.0 , 5.0 ;
   Start_kpos << -2.0 , -2.0 , -2.0 ;
-  Start_kvel << -6.0 , -6.0 , -6.0 ;
+  Start_kvel << -4.0 , -4.0 , -6.0 ;
   mavPos_ << 0.0, 0.0, 0.0;
   mavYaw_ = 0.0 ;
   mavVel_ << 0.0, 0.0, 0.0;
@@ -531,8 +531,8 @@ ROS_INFO_STREAM("n_T_const"<<norm_thrust_const_);
 }
 
 void geometricCtrl::ascending_thrust(){
-if(current_state_.mode == "OFFBOARD" && current_state_.armed && (mavPos_(2) < 1.0)) {
-norm_thrust_const_ += 0.00005 ;
+if(current_state_.mode == "OFFBOARD" && current_state_.armed && (mavPos_(2) < 0.7)) {
+norm_thrust_const_ += 0.0002 ;
 }
 }
 

@@ -182,7 +182,7 @@ class geometricCtrl {
   double Landing_velocity_;
   double tau_x, tau_y, tau_z;
   float battery_voltage ;
-  double krp = 2.0, kyaw = 2.0, kvel_landing = 7,kpos_landing = 3,krp_start = 3.0 ;
+  double krp = 2.0, kyaw = 2.0, kvel_landing = 7,kpos_landing = 3,krp_start = 4.0 ;
   double Kpos_x_, Kpos_y_, Kpos_z_, Kvel_x_, Kvel_y_, Kvel_z_ , Krp_ , Kyaw_;
   int posehistory_window_;
   bool done_thrust_calib = false;

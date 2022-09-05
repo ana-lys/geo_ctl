@@ -40,7 +40,7 @@
           <param name="Kyaw" value="2.0"/>
           <param name="init_pos_x" value="-0.0"/>
           <param name="init_pos_y" value="-0.0"/>
-          <param name="init_pos_z" value="7.0"/>
+          <param name="init_pos_z" value="2.0"/>
   </node>
 
    <!-- <node name="trajectory_sampler" pkg="uav_motion" type="trajectory_sampler" output="screen">
@@ -78,9 +78,10 @@
       <arg name="vehicle" value="$(arg mav_name)"/>
       <arg name="x" value="0"/>
       <arg name="y" value="0"/>
-      <arg name="z" value="0.5"/>
+      <arg name="z" value="0.02"/>
       <arg name="R" value="0"/>
-      <arg name="P" value="0.5"/>
+      <arg name="P" value="0.0"/>
+      <!-- p = 0.5 solo ,z =0.5 -->
       <arg name="Y" value="0"/>
   </include>
 
