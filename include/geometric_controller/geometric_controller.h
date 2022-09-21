@@ -63,6 +63,7 @@
 #include <sensor_msgs/BatteryState.h>
 #include <std_msgs/Float32.h>
 #include <Eigen/Dense>
+#include <quadrotor_msgs/PositionCommand.h>
 
 #include <visualization_msgs/Marker.h>
 #include <controller_msgs/FlatTarget.h>
@@ -104,7 +105,7 @@ class geometricCtrl {
   ros::NodeHandle nh_;
   ros::NodeHandle nh_private_;
   ros::Subscriber referenceSub_;
-  ros::Subscriber flatreferenceSub_;
+  ros::Subscriber flatreferenceSub_,quad_msgsSub_;
   ros::Subscriber multiDOFJointSub_;
   ros::Subscriber mavstateSub_;
   ros::Subscriber gpsrawSub_;
@@ -199,6 +200,7 @@ class geometricCtrl {
   void odomCallback(const nav_msgs::OdometryConstPtr &odomMsg);
   void targetCallback(const geometry_msgs::TwistStamped &msg);
   void flattargetCallback(const controller_msgs::FlatTarget &msg);
+  void quad_msgsCallback(const quadrotor_msgs::PositionCommand &msg);
   void yawtargetCallback(const std_msgs::Float32 &msg);
   void multiDOFJointCallback(const trajectory_msgs::MultiDOFJointTrajectory &msg);
   void loadgroundtruth_callback(const nav_msgs::Odometry &msg);
