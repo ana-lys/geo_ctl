@@ -9,6 +9,9 @@
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/visualization_msgs_generate_messages_py.dir
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/visualization_msgs_generate_messages_nodejs.dir
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/visualization_msgs_generate_messages_lisp.dir
+/home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/quadrotor_msgs_generate_messages_nodejs.dir
+/home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/quadrotor_msgs_generate_messages_eus.dir
+/home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/quadrotor_msgs_generate_messages_cpp.dir
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/trajectory_msgs_generate_messages_nodejs.dir
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/trajectory_msgs_generate_messages_lisp.dir
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/trajectory_msgs_generate_messages_cpp.dir
@@ -21,6 +24,7 @@
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/mavros_msgs_generate_messages_nodejs.dir
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/mavros_msgs_generate_messages_eus.dir
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/uuid_msgs_generate_messages_py.dir
+/home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/quadrotor_msgs_generate_messages_py.dir
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/uuid_msgs_generate_messages_nodejs.dir
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/geographic_msgs_generate_messages_py.dir
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/geographic_msgs_generate_messages_nodejs.dir
@@ -73,6 +77,7 @@
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/geometry_msgs_generate_messages_lisp.dir
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/tf_generate_messages_nodejs.dir
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/geometry_msgs_generate_messages_cpp.dir
+/home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/quadrotor_msgs_generate_messages_lisp.dir
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/mavros_msgs_generate_messages_cpp.dir
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/dynamic_reconfigure_generate_messages_nodejs.dir
 /home/analys/geo_ws/src/mavros_controllers/geometric_controller/build/CMakeFiles/tf2_msgs_generate_messages_py.dir

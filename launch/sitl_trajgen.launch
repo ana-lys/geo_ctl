@@ -1,5 +1,5 @@
 <launch>
-  <arg name="mav_name" default="solo"/> <!--iris-->
+  <arg name="mav_name" default="iris"/> <!--iris-->
   <arg name="fcu_url" default="udp://:14540@127.0.0.1:14557"/>
   <arg name="gcs_url" default="" />
   <arg name="tgt_system" default="1" />
@@ -78,7 +78,7 @@
       <arg name="vehicle" value="$(arg mav_name)"/>
       <arg name="x" value="0"/>
       <arg name="y" value="0"/>
-      <arg name="z" value="0.02"/>
+      <arg name="z" value="0.5"/>0.02
       <arg name="R" value="0"/>
       <arg name="P" value="0.0"/>
       <!-- p = 0.5 solo ,z =0.5 -->

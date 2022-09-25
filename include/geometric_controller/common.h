@@ -65,6 +65,28 @@ Eigen::Vector3d toEigen(const geometry_msgs::Point &p) {
   return ev3;
 }
 
+Eigen::Vector3d toEigen(const geometry_msgs::PoseStamped &p) {
+  return toEigen(p.pose.position);
+}
+Eigen::Vector3d tohorizontal( Eigen::Vector3d v) {
+  Eigen::Vector3d h(v(0), v(1), 0);
+  return h;
+}
+
+Eigen::Vector3d tovertical( Eigen::Vector3d h) {
+  Eigen::Vector3d v(0, 0, h(2));
+  return v;
+}
+inline double positive_db(double db){
+  if (db > 0) return db;
+  else return 0;
+}
+
+inline double greater_than_one_db(double db){
+  if (db > 1) return db;
+  else return 1;
+}
+
 inline Eigen::Vector3d toEigen(const geometry_msgs::Vector3 &v3) {
   Eigen::Vector3d ev3(v3.x, v3.y, v3.z);
   return ev3;

@@ -66,7 +66,7 @@
 #include <quadrotor_msgs/PositionCommand.h>
 
 #include <visualization_msgs/Marker.h>
-#include <controller_msgs/FlatTarget.h>
+#include "FlatTarget.h"
 #include <dynamic_reconfigure/server.h>
 #include <geometric_controller/GeometricControllerConfig.h>
 #include <std_srvs/SetBool.h>
@@ -80,6 +80,7 @@
 #include "UTM.h"
 #include "logging_lib.cpp"
 #include <cmath>
+#include <deque>
 
 #define ERROR_QUATERNION 1
 #define ERROR_GEOMETRIC 2
@@ -100,6 +101,13 @@ enum class MAV_STATE {
   MAV_STATE_FLIGHT_TERMINATION,
 };
 
+struct marker {
+Eigen::Vector3d relative_pose;
+Eigen::Vector3d local_pose;
+double trust_coeff;
+ros::Time stamp;
+};
+
 class geometricCtrl {
  private:
   ros::NodeHandle nh_;
@@ -110,7 +118,7 @@ class geometricCtrl {
   ros::Subscriber mavstateSub_;
   ros::Subscriber gpsrawSub_;
   ros::Subscriber global_poseSub_;
-  ros::Subscriber tf_marker;
+  ros::Subscriber marker_relative_Sub_;
   ros::Subscriber mavposeSub_, gzmavposeSub_;
   ros::Subscriber mavtwistSub_,batterySub_;
   ros::Subscriber imuSub_,imuloadSub_,imu_physicalSub_,load_ground_truthSub_;
@@ -118,7 +126,6 @@ class geometricCtrl {
   ros::Publisher rotorVelPub_, angularVelPub_, target_pose_pub_;
   ros::Publisher referencePosePub_;
   ros::Publisher posehistoryPub_;
-  ros::Publisher ImuPmarker_pub;
   ros::Publisher systemstatusPub_;
   ros::ServiceClient arming_client_;
   ros::ServiceClient set_mode_client_;
@@ -130,8 +137,8 @@ class geometricCtrl {
   bool fail_detec_, ctrl_enable_, feedthrough_enable_,load_control_;
   int ctrl_mode_;
   int cross_status,cross_counter;
-  double cross_sum,cross_average; 
-  bool landing_commanded_,landing_detected = false ;
+  double cross_sum,cross_average,cross_last; 
+  bool landing_commanded_,landing_detected = false,Basending_thrust = true ;
   bool sim_enable_;
   int landing = 0;
   int gps_enable = 1 ;
@@ -149,13 +156,14 @@ class geometricCtrl {
   double drone_max_ver_acc =18.0;
   double start_norm_thrust = 0.2;
   double landing_loop = 1.0,last_yaw_X;
-  Eigen::Vector3d last_detected_pos;
+  deque<marker> dq_markers;
+  marker last_marker;
   mavros_msgs::State current_state_;
   mavros_msgs::SetMode offb_set_mode_;
   mavros_msgs::CommandBool arm_cmd_;
   std::vector<geometry_msgs::PoseStamped> posehistory_vector_;
   MAV_STATE companion_state_ = MAV_STATE::MAV_STATE_ACTIVE;
-
+  
   double initTargetPos_x_, initTargetPos_y_, initTargetPos_z_;
   Eigen::Vector3d targetPos_, targetVel_, targetAcc_, targetJerk_, targetSnap_, targetPos_prev_, targetVel_prev_;
   Eigen::Vector3d mavPos_, mavVel_, mavRate_;
@@ -210,6 +218,8 @@ class geometricCtrl {
   void mavposeCallback(const geometry_msgs::PoseStamped &msg);
   void mavtwistCallback(const geometry_msgs::TwistStamped &msg);
   void statusloopCallback(const ros::TimerEvent &event);
+  void markerCallback(const geometry_msgs::PoseStamped &msg);
+  void update_marker_deque();
   void batteryCallback(const sensor_msgs::BatteryState &state);
   bool ctrltriggerCallback(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res);
   bool landCallback(std_srvs::SetBool::Request &request, std_srvs::SetBool::Response &response);
@@ -225,6 +235,7 @@ class geometricCtrl {
   double ToEulerYaw(const Eigen::Quaterniond& q); 
   Eigen::Vector3d controlPosition(const Eigen::Vector3d &target_pos, const Eigen::Vector3d &target_vel,
                                   const Eigen::Vector3d &target_acc);
+  Eigen::Vector3d controlMarker(marker main_marker, marker side_marker);
   Eigen::Vector3d control_Load_Position(const Eigen::Vector3d &target_pos, const Eigen::Vector3d &target_vel,
                                   const Eigen::Vector3d &target_acc);
   Eigen::Vector3d poscontroller(const Eigen::Vector3d &pos_error, const Eigen::Vector3d &vel_error);

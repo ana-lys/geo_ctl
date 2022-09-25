@@ -57,6 +57,7 @@ geometricCtrl::geometricCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &n
                                     ros::TransportHints().tcpNoDelay());
   quad_msgsSub_ = nh_.subscribe("/planning/pos_cmd", 1, &geometricCtrl::quad_msgsCallback, this,
                                     ros::TransportHints().tcpNoDelay());
+  marker_relative_Sub_ = nh_.subscribe("/aruco_detector/pose",1,&geometricCtrl::markerCallback, this, ros::TransportHints().tcpNoDelay());
   yawreferenceSub_ =
       nh_.subscribe("reference/yaw", 1, &geometricCtrl::yawtargetCallback, this, ros::TransportHints().tcpNoDelay());
   multiDOFJointSub_ = nh_.subscribe("command/trajectory", 1, &geometricCtrl::multiDOFJointCallback, this,
@@ -78,7 +79,6 @@ geometricCtrl::geometricCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &n
                               ros::TransportHints().tcpNoDelay());
   global_poseSub_= nh_.subscribe("mavros/global_position/local", 1, &geometricCtrl::globalCallback, this,
                                ros::TransportHints().tcpNoDelay());     
-  ImuPmarker_pub = nh_.advertise<visualization_msgs::Marker>( "/ImuP_marker", 0 );
   angularVelPub_ = nh_.advertise<mavros_msgs::AttitudeTarget>("command/bodyrate_command", 1);
   referencePosePub_ = nh_.advertise<geometry_msgs::PoseStamped>("reference/pose", 1);
   target_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("mavros/setpoint_position/local", 10);
@@ -119,7 +119,7 @@ geometricCtrl::geometricCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &n
   Landing_velocity << 0.0, 0.0, Landing_velocity_*-1.0;
   targetPos_ << initTargetPos_x_, initTargetPos_y_, initTargetPos_z_;  // Initial Position
   targetVel_ << 0.0, 0.0, 0.0;
-  Start_pos << 0.0 ,0.0 , 5.0 ;
+  Start_pos << 0.0 ,0.0 , 2.0 ;
   Start_kpos << -2.0 , -2.0 , -2.0 ;
   Start_kvel << -4.0 , -4.0 , -6.0 ;
   mavPos_ << 0.0, 0.0, 0.0;
@@ -173,6 +173,12 @@ Imu_accel = quat_imu * Imu_base ;
 // ROS_INFO_STREAM(Imu_accel+g_<<"imu_base");
 }
 
+void geometricCtrl::markerCallback(const geometry_msgs::PoseStamped &msg){
+last_marker.relative_pose =toEigen(msg);
+last_marker.local_pose << msg.pose.orientation.x,msg.pose.orientation.y,msg.pose.orientation.z;
+last_marker.trust_coeff = msg.pose.orientation.w;
+last_marker.stamp = msg.header.stamp;
+}
 
 void geometricCtrl::globalCallback(const nav_msgs::Odometry &msg){
     globalPos_ = toEigen(msg.pose.pose.position);
@@ -303,7 +309,7 @@ bool geometricCtrl::landCallback(std_srvs::SetBool::Request &request, std_srvs::
   // landing_detected = true ;
   // else landing_detected = false ;
   // ROS_INFO_STREAM("landing _detected"<<landing_detected);
-  // node_state = LANDING;
+  node_state = LANDING;
   // last_detected_pos = mavPos_;
   // landing_pos = mavPos_;
   // landing_vel = mavVel_;
@@ -325,7 +331,6 @@ void geometricCtrl::cmdloopCallback(const ros::TimerEvent &event) {
       computeBodyRateCmd(cmdBodyRate_, desired_acc);
       pubRateCommands(cmdBodyRate_, q_des);
       ascending_thrust();
-      ROS_INFO_STREAM(Imu_accel(0)<<" "<<Imu_accel(1)<<" "<<Imu_accel(2)<<" ");
       if(check_cross()== 1){
       loadFlyparams();
       node_state = MISSION_EXECUTION;
@@ -333,12 +338,17 @@ void geometricCtrl::cmdloopCallback(const ros::TimerEvent &event) {
       break;
     }
     case MISSION_EXECUTION: {
-      // if(current_state_.mode != "OFFBOARD" || !current_state_.armed) break;
       desired_acc = controlPosition(targetPos_, targetVel_, targetAcc_);
       computeBodyRateCmd(cmdBodyRate_, desired_acc);
       pubRateCommands(cmdBodyRate_, q_des);
       break;
     } 
+    case LANDING: {
+      desired_acc = controlMarker(last_marker , last_marker);
+      computeBodyRateCmd(cmdBodyRate_, desired_acc);
+      pubRateCommands(cmdBodyRate_, q_des);
+     break;
+    }
     case LANDED:
       ROS_INFO("Landed. Please set to position control and disarm.");
       cmdloop_timer_.stop();
@@ -423,6 +433,17 @@ Eigen::Vector3d geometricCtrl::controlPosition(const Eigen::Vector3d &target_pos
   Eigen::Vector3d zb = mavAtt_ * Eigen::Vector3d::UnitZ();
   return a_des;
 }
+Eigen::Vector3d geometricCtrl::controlMarker(marker main_marker , marker side_marker) {
+  Eigen::Vector3d marker_fb = main_marker.trust_coeff * main_marker.relative_pose * positive_db(1 - 0.3 * (ros::Time::now() - main_marker.stamp).toSec()) ;
+  Eigen::Vector3d vh_des = tohorizontal(marker_fb)/greater_than_one_db(tohorizontal(marker_fb).norm()/0.5);
+  Eigen::Vector3d vv_des ( 0.0 ,0.0 , -0.14 / log(tohorizontal(main_marker.relative_pose ).norm()/ -main_marker.relative_pose(2)+1.25) + 0.22);
+  ROS_INFO_STREAM("vh_des"<<" "<<vh_des(0)<<" "<<vh_des(1)<<" "<<vh_des(2));
+  ROS_INFO_STREAM("vv_des"<<" "<<vv_des(0)<<" "<<vv_des(1)<<" "<<vv_des(2));
+  Eigen::Vector3d a_fb = 2*(vh_des + vv_des -mavVel_);
+  Eigen::Vector3d a_des = a_fb - g_;
+  Eigen::Vector3d zb = mavAtt_ * Eigen::Vector3d::UnitZ();
+  return a_des;
+}
 
 double geometricCtrl::ToEulerYaw(const Eigen::Quaterniond& q){
     Vector3f angles;    //yaw pitch roll
@@ -494,7 +515,6 @@ Eigen::Vector3d geometricCtrl::poscontroller(const Eigen::Vector3d &pos_error, c
 
   return a_fb;
 }
-
 Eigen::Vector4d geometricCtrl::geometric_attcontroller(const Eigen::Quaterniond &ref_att, const Eigen::Vector3d &ref_acc,
                                                        Eigen::Quaterniond &curr_att) {
   Eigen::Vector4d ratecmd;
@@ -549,15 +569,17 @@ ROS_INFO_STREAM("n_T_const"<<norm_thrust_const_);
 }
 
 void geometricCtrl::ascending_thrust(){
-if(current_state_.mode == "OFFBOARD" && current_state_.armed && (mavPos_(2) < 0.7)) {
-norm_thrust_const_ += 0.0002 ;
+if(current_state_.mode == "OFFBOARD" && current_state_.armed && (mavPos_(2)>0.5)) {
+Basending_thrust = false;
 }
+if(Basending_thrust && current_state_.mode == "OFFBOARD" && current_state_.armed) norm_thrust_const_ += 0.00006 ;
 }
 
 int geometricCtrl::check_cross(){
-if( mavPos_(2) < 1.5 ) return -1;
-if( cross_counter >= 30 ){ cross_average = cross_sum / 30.0; return 1;}
-if( fabs(mavVel_(2))< 0.05) {cross_counter ++; cross_sum += cmdBodyRate_(3);}
+if( mavPos_(2) < 1 || fabs(mavVel_(2)) > 0.5 ) return -1;
+if( cross_counter >= 10 ){ cross_average = cross_sum / 10.0; return 1;}
+if( fabs(Imu_accel(2)-9.8)< 0.05 && mavPos_(2) >1.0 && cross_counter < 10) {cross_counter ++; cross_sum += cross_last*9.6/Imu_accel(2);}
+cross_last = cmdBodyRate_(3);
 return 0;
 }
 void geometricCtrl::dynamicReconfigureCallback(geometric_controller::GeometricControllerConfig &config,
