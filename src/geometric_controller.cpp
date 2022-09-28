@@ -178,6 +178,8 @@ last_marker.relative_pose =toEigen(msg);
 last_marker.local_pose << msg.pose.orientation.x,msg.pose.orientation.y,msg.pose.orientation.z;
 last_marker.trust_coeff = msg.pose.orientation.w;
 last_marker.stamp = msg.header.stamp;
+last_marker_control = ros::Time::now();
+if(landing_commanded_) node_state = LANDING;
 }
 
 void geometricCtrl::globalCallback(const nav_msgs::Odometry &msg){
@@ -303,17 +305,7 @@ void geometricCtrl::mavtwistCallback(const geometry_msgs::TwistStamped &msg) {
 }
 
 bool geometricCtrl::landCallback(std_srvs::SetBool::Request &request, std_srvs::SetBool::Response &response) {
-  // last_landing_request = ros::Time::now();
-  // last_landing_command = ros::Time::now();
-  // if(request.data == true)
-  // landing_detected = true ;
-  // else landing_detected = false ;
-  // ROS_INFO_STREAM("landing _detected"<<landing_detected);
-  node_state = LANDING;
-  // last_detected_pos = mavPos_;
-  // landing_pos = mavPos_;
-  // landing_vel = mavVel_;
-  // Landing_last_horizontal_error = horizontal_part(mavPos_)- Eigen::Vector3d::Zero();
+  landing_commanded_ = true;
   return true;
 }
 
@@ -434,17 +426,37 @@ Eigen::Vector3d geometricCtrl::controlPosition(const Eigen::Vector3d &target_pos
   return a_des;
 }
 Eigen::Vector3d geometricCtrl::controlMarker(marker main_marker , marker side_marker) {
-  Eigen::Vector3d marker_fb = main_marker.trust_coeff * main_marker.relative_pose * positive_db(1 - 0.3 * (ros::Time::now() - main_marker.stamp).toSec()) ;
-  Eigen::Vector3d vh_des = tohorizontal(marker_fb)/greater_than_one_db(tohorizontal(marker_fb).norm()/0.5);
-  Eigen::Vector3d vv_des ( 0.0 ,0.0 , -0.14 / log(tohorizontal(main_marker.relative_pose ).norm()/ -main_marker.relative_pose(2)+1.25) + 0.22);
-  ROS_INFO_STREAM("vh_des"<<" "<<vh_des(0)<<" "<<vh_des(1)<<" "<<vh_des(2));
-  ROS_INFO_STREAM("vv_des"<<" "<<vv_des(0)<<" "<<vv_des(1)<<" "<<vv_des(2));
-  Eigen::Vector3d a_fb = 2*(vh_des + vv_des -mavVel_);
-  Eigen::Vector3d a_des = a_fb - g_;
+  double delta_t = (ros::Time::now() - main_marker.stamp).toSec();
+  double integral_dt =(ros::Time::now() -last_marker_control).toSec();
+  ROS_INFO_STREAM(integral_dt);
+  landing_state_trigger(delta_t);
+  double time_coeff = 0.9 * sinc (delta_t-1.2) + 0.1;
+  Eigen::Vector3d marker_fb = main_marker.trust_coeff * main_marker.relative_pose * time_coeff ;
+  Eigen::Vector3d vh_des = reScaleMax(tohorizontal(marker_fb),0.5);
+  Eigen::Vector3d vv_des ( 0.0 ,0.0 , time_coeff * H2VCoeff(marker_fb));
+  Eigen::Vector3d a_fb = 2 * (vh_des + vv_des -mavVel_);
+  integral_marker = reScaleMax(integral_marker + a_fb * integral_dt,2.0);
+  Eigen::Vector3d a_des = a_fb - g_ + integral_marker ;
   Eigen::Vector3d zb = mavAtt_ * Eigen::Vector3d::UnitZ();
+  last_marker_control =ros::Time::now();
   return a_des;
 }
-
+void geometricCtrl::landing_state_trigger(double time){
+  if(time > 4.0 && last_marker.relative_pose(2) < 2.5 ){
+  integral_marker = Eigen::Vector3d::Zero();
+  targetPos_ = mavPos_ - Eigen::Vector3d::UnitZ()*3;
+  targetVel_ = Eigen::Vector3d::Zero();
+  targetAcc_ = Eigen::Vector3d::Zero();
+  node_state = MISSION_EXECUTION;
+  }
+  else if(time > 8.0) {
+  integral_marker = Eigen::Vector3d::Zero();
+  targetPos_ = mavPos_;
+  targetVel_ = Eigen::Vector3d::Zero();
+  targetAcc_ = Eigen::Vector3d::Zero();
+  node_state = MISSION_EXECUTION;
+  }
+}
 double geometricCtrl::ToEulerYaw(const Eigen::Quaterniond& q){
     Vector3f angles;    //yaw pitch roll
     const auto x = q.x();
@@ -578,7 +590,7 @@ if(Basending_thrust && current_state_.mode == "OFFBOARD" && current_state_.armed
 int geometricCtrl::check_cross(){
 if( mavPos_(2) < 1 || fabs(mavVel_(2)) > 0.5 ) return -1;
 if( cross_counter >= 10 ){ cross_average = cross_sum / 10.0; return 1;}
-if( fabs(Imu_accel(2)-9.8)< 0.05 && mavPos_(2) >1.0 && cross_counter < 10) {cross_counter ++; cross_sum += cross_last*9.6/Imu_accel(2);}
+if( fabs(Imu_accel(2)-9.8)< 0.05 && mavPos_(2) >1.0 && cross_counter < 10) {cross_counter ++; cross_sum += cross_last*9.8/Imu_accel(2);}
 cross_last = cmdBodyRate_(3);
 return 0;
 }

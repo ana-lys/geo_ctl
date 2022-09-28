@@ -132,7 +132,7 @@ class geometricCtrl {
   ros::ServiceServer ctrltriggerServ_;
   ros::ServiceServer land_service_;
   ros::Timer cmdloop_timer_, statusloop_timer_;
-  ros::Time Cable_loop,Flight_start,last_request_, reference_request_now_, reference_request_last_ , last_landing_request ,last_load_time,last_physical_load_time, last_landing_command;
+  ros::Time Cable_loop,Flight_start,last_request_, reference_request_now_, reference_request_last_ , last_landing_request ,last_load_time,last_physical_load_time, last_landing_command ,last_marker_control;
   string mav_name_;
   bool fail_detec_, ctrl_enable_, feedthrough_enable_,load_control_;
   int ctrl_mode_;
@@ -169,6 +169,7 @@ class geometricCtrl {
   Eigen::Vector3d mavPos_, mavVel_, mavRate_;
   Eigen::Vector3d last_ref_acc_{Eigen::Vector3d::Zero()};
   Eigen::Vector3d landing_vel,landing_pos;
+  Eigen::Vector3d integral_marker;
   double mavYaw_;
   Eigen::Vector3d g_;
   Eigen::Vector3d Start_pos,Start_kpos,Start_kvel;
@@ -210,6 +211,7 @@ class geometricCtrl {
   void flattargetCallback(const controller_msgs::FlatTarget &msg);
   void quad_msgsCallback(const quadrotor_msgs::PositionCommand &msg);
   void yawtargetCallback(const std_msgs::Float32 &msg);
+  void landing_state_trigger(double time);
   void multiDOFJointCallback(const trajectory_msgs::MultiDOFJointTrajectory &msg);
   void loadgroundtruth_callback(const nav_msgs::Odometry &msg);
   void keyboardCallback(const geometry_msgs::Twist &msg);

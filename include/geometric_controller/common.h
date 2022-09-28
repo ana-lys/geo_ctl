@@ -82,9 +82,16 @@ inline double positive_db(double db){
   else return 0;
 }
 
-inline double greater_than_one_db(double db){
-  if (db > 1) return db;
-  else return 1;
+inline double dgto (double db){
+  //double greater than 1
+  return std::max (db ,1.0);
+}
+
+inline double sinc ( double x )
+{
+  if ( fabs ( x - 0.0 ) < 0.000001 )
+    return 1;
+  return sin ( x ) / ( x );
 }
 
 inline Eigen::Vector3d toEigen(const geometry_msgs::Vector3 &v3) {
@@ -97,6 +104,16 @@ Eigen::Vector4d quatMultiplication(const Eigen::Vector4d &q, const Eigen::Vector
   quat << p(0) * q(0) - p(1) * q(1) - p(2) * q(2) - p(3) * q(3), p(0) * q(1) + p(1) * q(0) - p(2) * q(3) + p(3) * q(2),
       p(0) * q(2) + p(1) * q(3) + p(2) * q(0) - p(3) * q(1), p(0) * q(3) - p(1) * q(2) + p(2) * q(1) + p(3) * q(0);
   return quat;
+}
+double H2Vratio(Eigen::Vector3d v){
+  return fabs(tohorizontal(v).norm()/v(2));
+}
+double H2VCoeff(Eigen::Vector3d v){
+  return (-0.5 / log(H2Vratio(v)+1.4) + 0.6);
+} 
+
+Eigen::Vector3d reScaleMax(Eigen::Vector3d v, double nml){
+return v / std::max(v.norm()/nml,1.0);
 }
 
 Eigen::Matrix3d quat2RotMatrix(const Eigen::Vector4d &q) {
