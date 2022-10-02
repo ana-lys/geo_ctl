@@ -30,6 +30,8 @@
           <param name="normalizedthrust_constant" value="0.0565171"/>
           <param name="normalizedthrust_offset" value="0.0"/>
           <param name="landing_vel" value="0.35" />
+          <param name="quad_mass" value="1.5" />
+          <param name="load_mass" value="1.0" />
           <param name="Kp_x" value="2.0"/>
           <param name="Kp_y" value="2.0"/>
           <param name="Kp_z" value="4.0"/>
@@ -63,7 +65,7 @@
       <arg name="vehicle" value="$(arg mav_name)"/>
       <arg name="x" value="0"/>
       <arg name="y" value="0"/>
-      <arg name="z" value="0.5"/>0.02
+      <arg name="z" value="0.35"/>0.02
       <arg name="R" value="0"/>
       <arg name="P" value="0.2"/>
       <!-- p = 0.5 solo ,z =0.5 -->

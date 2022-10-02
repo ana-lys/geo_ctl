@@ -64,9 +64,9 @@
 #include <std_msgs/Float32.h>
 #include <Eigen/Dense>
 #include <quadrotor_msgs/PositionCommand.h>
-
 #include <visualization_msgs/Marker.h>
 #include "FlatTarget.h"
+#include "PositionCommand.h"
 #include <dynamic_reconfigure/server.h>
 #include <geometric_controller/GeometricControllerConfig.h>
 #include <std_srvs/SetBool.h>
@@ -113,7 +113,7 @@ class geometricLoaded {
   ros::NodeHandle nh_;
   ros::NodeHandle nh_private_;
   ros::Subscriber referenceSub_;
-  ros::Subscriber flatreferenceSub_,quad_msgsSub_;
+  ros::Subscriber flatreferenceSub_,quad_msgsSub_,rotorTmSub_;
   ros::Subscriber multiDOFJointSub_;
   ros::Subscriber mavstateSub_;
   ros::Subscriber gpsrawSub_;
@@ -141,6 +141,7 @@ class geometricLoaded {
   bool landing_commanded_,landing_detected = false,Basending_thrust = true ;
   bool sim_enable_;
   int landing = 0;
+  double quad_mass , load_mass ;
   int gps_enable = 1 ;
   bool velocity_yaw_;
   double kp_rot_, kd_rot_;
@@ -210,6 +211,7 @@ class geometricLoaded {
   void targetCallback(const geometry_msgs::TwistStamped &msg);
   void flattargetCallback(const controller_msgs::FlatTarget &msg);
   void quad_msgsCallback(const quadrotor_msgs::PositionCommand &msg);
+  void rotorTmCallback(const controller_msgs::PositionCommand &msg);
   void yawtargetCallback(const std_msgs::Float32 &msg);
   void landing_state_trigger(int state);
   void multiDOFJointCallback(const trajectory_msgs::MultiDOFJointTrajectory &msg);

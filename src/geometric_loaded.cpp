@@ -59,6 +59,7 @@ geometricLoaded::geometricLoaded(const ros::NodeHandle &nh, const ros::NodeHandl
       nh_.subscribe("reference/yaw", 1, &geometricLoaded::yawtargetCallback, this, ros::TransportHints().tcpNoDelay());
   multiDOFJointSub_ = nh_.subscribe("command/trajectory", 1, &geometricLoaded::multiDOFJointCallback, this,
                                     ros::TransportHints().tcpNoDelay());
+  rotorTmSub_ = nh_.subscribe("/payload/des_traj", 1, &geometricLoaded::rotorTmCallback ,this ,ros::TransportHints().tcpNoDelay());
   mavstateSub_ =
       nh_.subscribe("mavros/state", 1, &geometricLoaded::mavstateCallback, this, ros::TransportHints().tcpNoDelay());
   mavposeSub_ = nh_.subscribe("mavros/local_position/pose", 1, &geometricLoaded::mavposeCallback, this,
@@ -113,6 +114,8 @@ geometricLoaded::geometricLoaded(const ros::NodeHandle &nh, const ros::NodeHandl
   nh_private_.param<double>("Kv_z", Kvel_z_, 3.3);
   nh_private_.param<double>("Krp",  Krp_, 1.5);
   nh_private_.param<double>("Kyaw", Kyaw_, 2);
+   nh_private_.param<double>("quad_mass",  quad_mass , 1.5);
+  nh_private_.param<double>("load_mass", load_mass , 1.0);
   nh_private_.param<int>("posehistory_window", posehistory_window_, 200);
   nh_private_.param<double>("init_pos_x", initTargetPos_x_, 0.0);
   nh_private_.param<double>("init_pos_y", initTargetPos_y_, 0.0);
@@ -274,6 +277,26 @@ void geometricLoaded::flattargetCallback(const controller_msgs::FlatTarget &msg)
     targetJerk_ = toEigen(msg.jerk);
     targetSnap_ = toEigen(msg.snap);
   }
+}
+void geometricLoaded::quad_msgsCallback(const quadrotor_msgs::PositionCommand &msg) {
+
+  reference_request_now_ = ros::Time::now();
+  targetPos_ = toEigen(msg.position);
+  targetVel_ = toEigen(msg.velocity);
+  targetAcc_ = toEigen(msg.acceleration);
+  mavYaw_ = double(msg.yaw);
+
+}
+
+void geometricLoaded::rotorTmCallback(const controller_msgs::PositionCommand &msg) {
+
+  reference_request_now_ = ros::Time::now();
+  targetPos_ = toEigen(msg.position);
+  targetVel_ = toEigen(msg.velocity);
+  targetAcc_ = toEigen(msg.acceleration);
+  Eigen::Quaterniond quatTM;
+  quatTM =toEigen(msg.quaternion);
+  mavYaw_ = quatTM.toRotationMatrix().eulerAngles(0, 1, 2)(2);
 }
 
 void geometricLoaded::yawtargetCallback(const std_msgs::Float32 &msg) {
@@ -460,7 +483,7 @@ Eigen::Vector3d geometricLoaded::control_Load_Position(const Eigen::Vector3d &ta
 }
 void geometricLoaded::computeLoadQuatCmd( const Eigen::Vector3d &a_des) {
   // Reference attitude
-  double loadYaw_ = 0.0;
+  double loadYaw_ = mavYaw_;
   Eigen::Vector3d x_C = loadYaw_* Eigen::Vector3d::UnitX();
   Eigen::Vector3d y_C = loadYaw_ * Eigen::Vector3d::UnitY();
   Eigen::Vector3d z_B;
@@ -511,7 +534,7 @@ void geometricLoaded::computeCableCmd(Eigen::Vector3d &a_des, Eigen::Quaterniond
   Eigen::Vector3d quad_pos_target =  targetPos_+  q_quad_des * Eigen::Vector3d::UnitZ() * 0.4;
   Eigen::Vector3d quad_vel_target =  targetVel_ ;
   desired_acc = controlPosition( quad_pos_target , quad_vel_target , Eigen::Vector3d::Zero());
-  desired_acc +=  a_des/ 3 ;
+  desired_acc +=  a_des / ( quad_mass / load_mass ) ;
 } 
 
 Eigen::Vector3d geometricLoaded::computeRobustBodyXAxis(
@@ -608,7 +631,7 @@ Kpos_ << -Kpos_x_, -Kpos_y_, -Kpos_z_;
 Kvel_ << -Kvel_x_, -Kvel_y_, -Kvel_z_;
 krp = Krp_;
 targetPos_ << initTargetPos_x_, initTargetPos_y_, initTargetPos_z_;
-norm_thrust_const_ = cross_average / 13.0666666667;
+norm_thrust_const_ = cross_average / 9.8 / (1.0 +load_mass/ quad_mass);
 ROS_INFO_STREAM("n_T_const"<<norm_thrust_const_);
 }
 
