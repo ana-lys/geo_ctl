@@ -73,6 +73,11 @@ Eigen::Vector3d tohorizontal( Eigen::Vector3d v) {
   return h;
 }
 
+Eigen::Quaterniond toEigen(const geometry_msgs::Quaternion &p) {
+  Eigen::Quaterniond q4(p.w ,p.x, p.y, p.z);
+    return q4;
+}
+
 Eigen::Vector3d tovertical( Eigen::Vector3d h) {
   Eigen::Vector3d v(0, 0, h(2));
   return v;

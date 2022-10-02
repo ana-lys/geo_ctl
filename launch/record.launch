@@ -1,7 +1,7 @@
 <launch>
 
   
-  <node pkg="geometric_controller" type="geometric_controller_node" name="geometric_controller" output="screen">
+  <node pkg="geometric_controller" type="geometric_recorder_node" name="geometric_controller" output="screen">
           
   </node>
 

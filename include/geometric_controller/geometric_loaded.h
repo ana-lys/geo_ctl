@@ -193,10 +193,10 @@ class geometricLoaded {
   double tau_x, tau_y, tau_z;
   float battery_voltage ;
   double krp = 2.0, kyaw = 2.0, kvel_landing = 7,kpos_landing = 3,krp_start = 4.0 ;
-  double Kpos_x_, Kpos_y_, Kpos_z_, Kvel_x_, Kvel_y_, Kvel_z_ , Krp_ , Kyaw_;
+  double Kpos_x_, Kpos_y_, Kpos_z_, Kvel_x_, Kvel_y_, Kvel_z_ , Krp_ , Kyaw_ , Kpos_load_xy ,Kpos_load_z ,Kvel_load_xy ,Kvel_load_z;
   int posehistory_window_;
   bool done_thrust_calib = false;
-  void imuCallback(const sensor_msgs::Imu &msg);
+  void imuCallback(const sensor_msgs::Imu &msg);;
   void imuloadCallback(const sensor_msgs::Imu &msg);
   void imuphysicalCallback(const sensor_msgs::Imu &msg);
   void pubMotorCommands();
@@ -233,8 +233,8 @@ class geometricLoaded {
   int check_cross();
   geometry_msgs::PoseStamped vector3d2PoseStampedMsg(Eigen::Vector3d &position, Eigen::Vector4d &orientation);
   void computeBodyRateCmd(Eigen::Vector4d &bodyrate_cmd, const Eigen::Vector3d &target_acc);
-  void computeLoadQuatCmd(const Eigen::Vector3d &target_acc);
-  void computeCableCmd(Eigen::Vector3d &load_target_acc);
+  void computeLoadQuatCmd(const Eigen::Vector3d &target_acc );
+  void computeCableCmd(Eigen::Vector3d &load_target_acc , Eigen::Quaterniond &quat);
   double ToEulerYaw(const Eigen::Quaterniond& q); 
   Eigen::Vector3d controlPosition(const Eigen::Vector3d &target_pos, const Eigen::Vector3d &target_vel,
                                   const Eigen::Vector3d &target_acc);
