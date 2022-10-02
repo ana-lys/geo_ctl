@@ -133,6 +133,7 @@ geometricCtrl::geometricCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &n
   tau << tau_x, tau_y, tau_z;
   Cable_loop =ros::Time::now();
   creates();
+  Flight_start = ros::Time::now();
 }
 geometricCtrl::~geometricCtrl() {
   // Destructor
@@ -174,12 +175,14 @@ Imu_accel = quat_imu * Imu_base ;
 }
 
 void geometricCtrl::markerCallback(const geometry_msgs::PoseStamped &msg){
+ROS_INFO_STREAM("markerCallback");
 last_marker.relative_pose =toEigen(msg);
 last_marker.local_pose << msg.pose.orientation.x,msg.pose.orientation.y,msg.pose.orientation.z;
 last_marker.trust_coeff = msg.pose.orientation.w;
 last_marker.stamp = msg.header.stamp;
 last_marker_control = ros::Time::now();
 if(landing_commanded_) node_state = LANDING;
+insert_marker_deque();
 }
 
 void geometricCtrl::globalCallback(const nav_msgs::Odometry &msg){
@@ -336,7 +339,8 @@ void geometricCtrl::cmdloopCallback(const ros::TimerEvent &event) {
       break;
     } 
     case LANDING: {
-      desired_acc = controlMarker(last_marker , last_marker);
+      delete_marker_deque();
+      desired_acc = controlMarker();
       computeBodyRateCmd(cmdBodyRate_, desired_acc);
       pubRateCommands(cmdBodyRate_, q_des);
      break;
@@ -425,31 +429,60 @@ Eigen::Vector3d geometricCtrl::controlPosition(const Eigen::Vector3d &target_pos
   Eigen::Vector3d zb = mavAtt_ * Eigen::Vector3d::UnitZ();
   return a_des;
 }
-Eigen::Vector3d geometricCtrl::controlMarker(marker main_marker , marker side_marker) {
-  double delta_t = (ros::Time::now() - main_marker.stamp).toSec();
+Eigen::Vector3d geometricCtrl::controlMarker() {
   double integral_dt =(ros::Time::now() -last_marker_control).toSec();
-  ROS_INFO_STREAM(integral_dt);
-  landing_state_trigger(delta_t);
-  double time_coeff = 0.9 * sinc (delta_t-1.2) + 0.1;
-  Eigen::Vector3d marker_fb = main_marker.trust_coeff * main_marker.relative_pose * time_coeff ;
+  Eigen::Vector3d marker_fb, temp;
+  for(int i = 0; i <dq_markers.size(); i++){
+  double delta_t = (ros::Time::now() - dq_markers.at(i).stamp).toSec();
+  double time_coeff =  pow((0.8 * sinc (2.0 * delta_t -3.0)-0.025),2);
+  //ROS_INFO_STREAM( i <<" " <<dq_markers.at(i).relative_pose(0) << " " << dq_markers.at(i).relative_pose(1) << " " << dq_markers.at(i).relative_pose(2) << " " << delta_t);
+  temp= dq_markers.at(i).trust_coeff * dq_markers.at(i).relative_pose * time_coeff ;
+  marker_fb += temp;
+  }
+  ROS_INFO_STREAM("Marker_fb"<<marker_fb(0)<<" "<<marker_fb(1)<<" "<<marker_fb(2));
   Eigen::Vector3d vh_des = reScaleMax(tohorizontal(marker_fb),0.5);
-  Eigen::Vector3d vv_des ( 0.0 ,0.0 , time_coeff * H2VCoeff(marker_fb));
-  Eigen::Vector3d a_fb = 2 * (vh_des + vv_des -mavVel_);
-  integral_marker = reScaleMax(integral_marker + a_fb * integral_dt,2.0);
-  Eigen::Vector3d a_des = a_fb - g_ + integral_marker ;
+  Eigen::Vector3d vv_des ( 0.0 ,0.0, H2VCoeff(marker_fb));
+  Eigen::Vector3d a_fb = (vh_des + vv_des -mavVel_);
+  integral_marker = reScaleMax(integral_marker + a_fb * integral_dt,1.0);
+
+  Eigen::Vector3d a_des = a_fb - g_ ;// integral_marker ;
   Eigen::Vector3d zb = mavAtt_ * Eigen::Vector3d::UnitZ();
   last_marker_control =ros::Time::now();
+  updates((ros::Time::now()-Flight_start).toSec(),mavPos_(0),mavPos_(1),mavPos_(2),vv_des(0),vv_des(1),vv_des(2),integral_marker(0),integral_marker(1),integral_marker(2),a_des(0),a_des(1),a_des(2),a_fb(0),a_fb(1),a_fb(2),marker_fb(0),marker_fb(1),marker_fb(2),0);
   return a_des;
 }
-void geometricCtrl::landing_state_trigger(double time){
-  if(time > 4.0 && last_marker.relative_pose(2) < 2.5 ){
-  integral_marker = Eigen::Vector3d::Zero();
-  targetPos_ = mavPos_ - Eigen::Vector3d::UnitZ()*3;
-  targetVel_ = Eigen::Vector3d::Zero();
-  targetAcc_ = Eigen::Vector3d::Zero();
-  node_state = MISSION_EXECUTION;
+void geometricCtrl::insert_marker_deque(){
+ROS_INFO("insert");
+  if(dq_markers.size()==0){
+    dq_markers.push_front(last_marker);
   }
-  else if(time > 8.0) {
+
+  else{
+  if((last_marker.stamp - dq_markers.at(0).stamp ).toSec() > 0 ){
+    dq_markers.push_front(last_marker);
+  }
+  }
+  
+  ROS_INFO_STREAM("update_marker_deque"<<dq_markers.size());
+}
+void geometricCtrl::delete_marker_deque(){
+  if(dq_markers.size()==0){
+    landing_state_trigger(0); 
+    return;
+  }
+  else while((ros::Time::now()-dq_markers.at(dq_markers.size()-1).stamp).toSec() > 3){
+    ROS_ERROR("f");
+    ROS_INFO_STREAM((ros::Time::now()-dq_markers.at(dq_markers.size()-1).stamp).toSec());
+    dq_markers.pop_back();
+    if(dq_markers.size()==0){
+    landing_state_trigger(0);
+    return;
+    }
+  }
+}
+void geometricCtrl::landing_state_trigger(int state){
+  ROS_INFO("landing_state_trigger");
+  if(state == 0){
   integral_marker = Eigen::Vector3d::Zero();
   targetPos_ = mavPos_;
   targetVel_ = Eigen::Vector3d::Zero();

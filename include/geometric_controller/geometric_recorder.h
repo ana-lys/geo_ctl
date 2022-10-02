@@ -65,7 +65,7 @@
 #include <Eigen/Dense>
 
 #include <visualization_msgs/Marker.h>
-#include <controller_msgs/FlatTarget.h>
+#include "FlatTarget.h"
 #include <dynamic_reconfigure/server.h>
 #include <geometric_controller/GeometricControllerConfig.h>
 #include <std_srvs/SetBool.h>
@@ -88,7 +88,7 @@ using namespace std;
 using namespace Eigen;
 
 
-class geometricCtrl {
+class geometricRecorder {
  private:
   ros::NodeHandle nh_;
   ros::NodeHandle nh_private_;
@@ -162,8 +162,8 @@ class geometricCtrl {
   bool gps_home_init = false;
   Eigen::Vector3d gps_home = Eigen::Vector3d::Zero();
  public:
-  geometricCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private);
-  virtual ~geometricCtrl();
+  geometricRecorder(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private);
+  virtual ~geometricRecorder();
  
 };
 

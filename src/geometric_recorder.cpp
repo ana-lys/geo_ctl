@@ -38,46 +38,46 @@
  * @author Jaeyoung Lim <jalim@ethz.ch>
  */
 
-#include "geometric_controller/geometric_controller.h"
+#include "geometric_controller/geometric_recorder.h"
 
 using namespace Eigen;
 using namespace std;
 // Constructor
-geometricCtrl::geometricCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private)
+geometricRecorder::geometricRecorder(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private)
     : nh_(nh),
       nh_private_(nh_private)
        {
-  flatreferenceSub_ = nh_.subscribe("reference/flatsetpoint", 1, &geometricCtrl::flattargetCallback, this,
+  flatreferenceSub_ = nh_.subscribe("reference/flatsetpoint", 1, &geometricRecorder::flattargetCallback, this,
                                     ros::TransportHints().tcpNoDelay());
   yawreferenceSub_ =
-      nh_.subscribe("reference/yaw", 1, &geometricCtrl::yawtargetCallback, this, ros::TransportHints().tcpNoDelay());
-  multiDOFJointSub_ = nh_.subscribe("command/trajectory", 1, &geometricCtrl::multiDOFJointCallback, this,
+      nh_.subscribe("reference/yaw", 1, &geometricRecorder::yawtargetCallback, this, ros::TransportHints().tcpNoDelay());
+  multiDOFJointSub_ = nh_.subscribe("command/trajectory", 1, &geometricRecorder::multiDOFJointCallback, this,
                                     ros::TransportHints().tcpNoDelay());
-  mavposeSub_ = nh_.subscribe("mavros/local_position/pose", 1, &geometricCtrl::mavposeCallback, this,
+  mavposeSub_ = nh_.subscribe("mavros/local_position/pose", 1, &geometricRecorder::mavposeCallback, this,
                               ros::TransportHints().tcpNoDelay());
-  mavtwistSub_ = nh_.subscribe("mavros/local_position/velocity_local", 1, &geometricCtrl::mavtwistCallback, this,
+  mavtwistSub_ = nh_.subscribe("mavros/local_position/velocity_local", 1, &geometricRecorder::mavtwistCallback, this,
                                ros::TransportHints().tcpNoDelay());
 
-  tf_marker = nh_.subscribe("/tf_marker", 1, &geometricCtrl::tf_markerCallback, this,
+  tf_marker = nh_.subscribe("/tf_marker", 1, &geometricRecorder::tf_markerCallback, this,
                               ros::TransportHints().tcpNoDelay());
-  cmdloop_timer_ = nh_.createTimer(ros::Duration(0.01), &geometricCtrl::cmdloopCallback,
+  cmdloop_timer_ = nh_.createTimer(ros::Duration(0.01), &geometricRecorder::cmdloopCallback,
                                    this);                           
-  batterySub_= nh_.subscribe("mavros/battery", 1, &geometricCtrl::batteryCallback, this,
+  batterySub_= nh_.subscribe("mavros/battery", 1, &geometricRecorder::batteryCallback, this,
                               ros::TransportHints().tcpNoDelay());  
   start = ros::Time::now();
   creates();
   updates(0,0,0,0,0,00,0,0,0,0,0,00,0,0,0,0,00,0,0,0);
 }
-geometricCtrl::~geometricCtrl() {
+geometricRecorder::~geometricRecorder() {
   // Destructor
 }
-void geometricCtrl::batteryCallback(const sensor_msgs::BatteryState &msg){
+void geometricRecorder::batteryCallback(const sensor_msgs::BatteryState &msg){
   battery_voltage = msg.voltage;
   // ROS_INFO_STREAM("Battery "<<battery_voltage);
 }
 
 
-void geometricCtrl::flattargetCallback(const controller_msgs::FlatTarget &msg) {
+void geometricRecorder::flattargetCallback(const controller_msgs::FlatTarget &msg) {
 
   targetPos_prev_ = targetPos_;
   targetVel_prev_ = targetVel_;
@@ -107,11 +107,11 @@ void geometricCtrl::flattargetCallback(const controller_msgs::FlatTarget &msg) {
   }
 }
 
-void geometricCtrl::yawtargetCallback(const std_msgs::Float32 &msg) {
+void geometricRecorder::yawtargetCallback(const std_msgs::Float32 &msg) {
   if (!velocity_yaw_) mavYaw_ = double(msg.data);
 }
 
-void geometricCtrl::multiDOFJointCallback(const trajectory_msgs::MultiDOFJointTrajectory &msg) {
+void geometricRecorder::multiDOFJointCallback(const trajectory_msgs::MultiDOFJointTrajectory &msg) {
   trajectory_msgs::MultiDOFJointTrajectoryPoint pt = msg.points[0];
 
   targetPos_prev_ = targetPos_;
@@ -132,7 +132,7 @@ void geometricCtrl::multiDOFJointCallback(const trajectory_msgs::MultiDOFJointTr
   }
 }
 
-void geometricCtrl::mavposeCallback(const geometry_msgs::PoseStamped &msg) {
+void geometricRecorder::mavposeCallback(const geometry_msgs::PoseStamped &msg) {
   mavPos_ = toEigen(msg.pose.position); 
   mavAtt_.w() = msg.pose.orientation.w;
   mavAtt_.x() = msg.pose.orientation.x;
@@ -140,7 +140,7 @@ void geometricCtrl::mavposeCallback(const geometry_msgs::PoseStamped &msg) {
   mavAtt_.z() = msg.pose.orientation.z;
 }
 
-void geometricCtrl::tf_markerCallback(const geometry_msgs::PoseStamped &msg) {
+void geometricRecorder::tf_markerCallback(const geometry_msgs::PoseStamped &msg) {
 
   if (msg.header.frame_id[1]== 'r'){   
      r_Pos = toEigen(msg.pose.position);
@@ -159,12 +159,12 @@ void geometricCtrl::tf_markerCallback(const geometry_msgs::PoseStamped &msg) {
   }
 }
 
-void geometricCtrl::mavtwistCallback(const geometry_msgs::TwistStamped &msg) {
+void geometricRecorder::mavtwistCallback(const geometry_msgs::TwistStamped &msg) {
   mavVel_ = toEigen(msg.twist.linear);
   mavRate_ = toEigen(msg.twist.angular);
 }
 
-void geometricCtrl::cmdloopCallback(const ros::TimerEvent &event) {
+void geometricRecorder::cmdloopCallback(const ros::TimerEvent &event) {
  double time = ros::Time::now().toSec() -start.toSec();
 
  if(!(r_Pos-lr_Pos).norm()> 0)  r_Pos = Eigen::Vector3d::Zero();

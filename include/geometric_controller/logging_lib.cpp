@@ -8,17 +8,17 @@ void creates()
 	std::fstream file; 
     name ="/home/analys/rigid_link_log/rigid.csv";
 	file.open(name, std::ios::out | std::ios::app); 
-	file << "TimeStamp,setX,setY,setZ,mavX,mavY,mavZ,velX,velY,velZ,WhyX,WhyY,WhyZ,Arux,Aruy,Aruz,Aprx,Apry,Apryz,Thrust\n";
+	file << "TimeStamp,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,Thrust\n";
     file.close(); 
 } 
  
 void updates(double time, 
-                   double errorX, double errorY, double errorZ, 
-                   double feedbackX, double feedbackY, double feedbackZ, 
-                   double ImuX, double ImuY, double ImuZ, 
-                   double setAX, double setAY, double setAZ, 
-                   double setVX, double setVY, double setVZ,
-                   double odoVX, double odoVY, double odoVZ,
+                   double a1, double a2, double a3, 
+                   double a4, double a5, double a6, 
+                   double a7, double a8, double a9, 
+                   double a10, double a11, double a12, 
+                   double a13, double a14, double a15,
+                   double a16, double a17, double a18,
                    double thrust
                    )
 {
@@ -28,24 +28,24 @@ void updates(double time,
     file.open(name, std::ios::out | std::ios::app); 
     if(!file.is_open()) cout << "file oppen error";
     file <<setprecision(2)<<fixed<< time<< ", " 
-                         << std::fixed << std::setprecision(8) << errorX << ", " 
-						 << std::fixed << std::setprecision(8) << errorY << ", " 
-						 << std::fixed << std::setprecision(8) << errorZ << ", "
-                         << std::fixed << std::setprecision(8) << feedbackX << ", " 
-						 << std::fixed << std::setprecision(8) << feedbackY << ", " 
-						 << std::fixed << std::setprecision(8) << feedbackZ << ", "
-						 << std::fixed << std::setprecision(8) << ImuX << ", " 
-						 << std::fixed << std::setprecision(8) << ImuY << ", " 
-						 << std::fixed << std::setprecision(8) << ImuZ << ", "
-                         << std::fixed << std::setprecision(8) << setAX << ", " 
-						 << std::fixed << std::setprecision(8) << setAY << ", " 
-						 << std::fixed << std::setprecision(8) << setAZ << ", "
-                         << std::fixed << std::setprecision(8) << setVX << ", " 
-						 << std::fixed << std::setprecision(8) << setVY << ", " 
-						 << std::fixed << std::setprecision(8) << setVZ << ", "
-                         << std::fixed << std::setprecision(8) << odoVX << ", " 
-						 << std::fixed << std::setprecision(8) << odoVY << ", " 
-                         << std::fixed << std::setprecision(8) << odoVZ << ", " 
+                         << std::fixed << std::setprecision(8) << a1 << ", " 
+						 << std::fixed << std::setprecision(8) << a2 << ", " 
+						 << std::fixed << std::setprecision(8) << a3 << ", "
+                         << std::fixed << std::setprecision(8) << a4 << ", " 
+						 << std::fixed << std::setprecision(8) << a5 << ", " 
+						 << std::fixed << std::setprecision(8) << a6 << ", "
+						 << std::fixed << std::setprecision(8) << a7 << ", " 
+						 << std::fixed << std::setprecision(8) << a8 << ", " 
+						 << std::fixed << std::setprecision(8) << a9 << ", "
+                         << std::fixed << std::setprecision(8) << a10 << ", " 
+						 << std::fixed << std::setprecision(8) << a11 << ", " 
+						 << std::fixed << std::setprecision(8) << a12 << ", "
+                         << std::fixed << std::setprecision(8) << a13 << ", " 
+						 << std::fixed << std::setprecision(8) << a14 << ", " 
+						 << std::fixed << std::setprecision(8) << a15 << ", "
+                         << std::fixed << std::setprecision(8) << a16 << ", " 
+						 << std::fixed << std::setprecision(8) << a17 << ", " 
+                         << std::fixed << std::setprecision(8) << a18 << ", " 
 						 << std::fixed << std::setprecision(8) << thrust<< "\n";
 
 	file.close(); 

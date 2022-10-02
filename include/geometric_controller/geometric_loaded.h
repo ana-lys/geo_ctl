@@ -108,7 +108,7 @@ double trust_coeff;
 ros::Time stamp;
 };
 
-class geometricCtrl {
+class geometricLoaded {
  private:
   ros::NodeHandle nh_;
   ros::NodeHandle nh_private_;
@@ -269,8 +269,8 @@ class geometricCtrl {
   Eigen::Vector3d gps_home = Eigen::Vector3d::Zero();
  public:
   void dynamicReconfigureCallback(geometric_controller::GeometricControllerConfig &config, uint32_t level);
-  geometricCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private);
-  virtual ~geometricCtrl();
+  geometricLoaded(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private);
+  virtual ~geometricLoaded();
   void getErrors(Eigen::Vector3d &pos, Eigen::Vector3d &vel) {
     pos = mavPos_ - targetPos_;
     vel = mavVel_ - targetVel_;

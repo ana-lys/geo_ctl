@@ -109,7 +109,7 @@ double H2Vratio(Eigen::Vector3d v){
   return fabs(tohorizontal(v).norm()/v(2));
 }
 double H2VCoeff(Eigen::Vector3d v){
-  return (-0.5 / log(H2Vratio(v)+1.4) + 0.6);
+  return (-0.5 / log(H2Vratio(v)+1.8) + 0.5);
 } 
 
 Eigen::Vector3d reScaleMax(Eigen::Vector3d v, double nml){
