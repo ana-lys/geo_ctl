@@ -67,6 +67,9 @@ add_executable(land
 add_executable(stat
   src/stat.cpp
 )
+add_executable(load
+  src/load.cpp
+)
 add_dependencies(geometric_controller_node geometric_controller ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(geometric_loaded_node geometric_loaded ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(geometric_recorder_node geometric_recorder ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
@@ -77,3 +80,4 @@ target_link_libraries(geometric_recorder_node geometric_recorder ${catkin_LIBRAR
 
 target_link_libraries(land ${PROJECT_NAME} ${catkin_LIBRARIES})
 target_link_libraries(stat ${PROJECT_NAME} ${catkin_LIBRARIES})
+target_link_libraries(load ${PROJECT_NAME} ${catkin_LIBRARIES})

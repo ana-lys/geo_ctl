@@ -185,9 +185,9 @@ class geometricCtrl {
   Eigen::Vector3d Imu_accel;
   Eigen::Vector3d desired_acc;
   Eigen::Vector3d Imu_ang_vel;
-  Eigen::Vector3d drag_accel;
+  Eigen::Vector3d drag_accel,integral_error;
   Eigen::Vector4d globalAtt_;
-  Eigen::Vector3d Load_pos,Loadp_pos,Load_last_pos,Loadp_last_pos,Load_vel,Loadp_vel,Last_quad_target_pos = Eigen::Vector3d::Zero();
+  Eigen::Vector3d Load_pos,Loadp_pos,Load_vel,Loadp_vel,Last_quad_target_pos = Eigen::Vector3d::Zero();
   Eigen::Vector3d Landing_velocity,Landing_last_horizontal_error;
   double Landing_velocity_;
   double tau_x, tau_y, tau_z;

@@ -125,7 +125,7 @@ class geometricLoaded {
   ros::Subscriber yawreferenceSub_;
   ros::Publisher rotorVelPub_, angularVelPub_, target_pose_pub_;
   ros::Publisher referencePosePub_;
-  ros::Publisher posehistoryPub_;
+  ros::Publisher posehistoryPub_,loadhistoryPub_;
   ros::Publisher systemstatusPub_;
   ros::ServiceClient arming_client_;
   ros::ServiceClient set_mode_client_;
@@ -141,7 +141,7 @@ class geometricLoaded {
   bool landing_commanded_,landing_detected = false,Basending_thrust = true ;
   bool sim_enable_;
   int landing = 0;
-  double quad_mass , load_mass ;
+  double quad_mass , load_mass ,cable_length ;
   int gps_enable = 1 ;
   bool velocity_yaw_;
   double kp_rot_, kd_rot_;
@@ -162,7 +162,7 @@ class geometricLoaded {
   mavros_msgs::State current_state_;
   mavros_msgs::SetMode offb_set_mode_;
   mavros_msgs::CommandBool arm_cmd_;
-  std::vector<geometry_msgs::PoseStamped> posehistory_vector_;
+  std::vector<geometry_msgs::PoseStamped> posehistory_vector_,loadhistory_vector_;
   MAV_STATE companion_state_ = MAV_STATE::MAV_STATE_ACTIVE;
   
   double initTargetPos_x_, initTargetPos_y_, initTargetPos_z_;
@@ -184,11 +184,11 @@ class geometricLoaded {
   Eigen::Quaterniond Imu_load_quat,Imup_load_quat;
   Eigen::Vector3d Load_accel,Loadp_accel,Load_pos_gth,Load_vel_gth;
   Eigen::Vector3d Imu_accel;
-  Eigen::Vector3d desired_acc;
+  Eigen::Vector3d desired_acc,xi_dot;
   Eigen::Vector3d Imu_ang_vel;
-  Eigen::Vector3d drag_accel;
+  Eigen::Vector3d drag_accel,integral_error;
   Eigen::Vector4d globalAtt_;
-  Eigen::Vector3d Load_pos,Loadp_pos,Load_last_pos,Loadp_last_pos,Load_vel,Loadp_vel,Last_quad_target_pos = Eigen::Vector3d::Zero();
+  Eigen::Vector3d Load_pos,Loadp_pos,Load_vel,Loadp_vel,Last_quad_target_pos = Eigen::Vector3d::Zero();
   Eigen::Vector3d Landing_velocity,Landing_last_horizontal_error;
   double Landing_velocity_;
   double tau_x, tau_y, tau_z;
@@ -229,9 +229,11 @@ class geometricLoaded {
   bool ctrltriggerCallback(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res);
   bool landCallback(std_srvs::SetBool::Request &request, std_srvs::SetBool::Response &response);
   bool almostZero(double value);
+  geometry_msgs::PoseStamped vector3d2PoseStampedMsg(Eigen::Vector3d position,Eigen::Quaterniond quaternion) ;
   void loadStartparams();
   void loadFlyparams();
   void ascending_thrust();
+  void appendPoseHistory(); 
   int check_cross();
   geometry_msgs::PoseStamped vector3d2PoseStampedMsg(Eigen::Vector3d &position, Eigen::Vector4d &orientation);
   void computeBodyRateCmd(Eigen::Vector4d &bodyrate_cmd, const Eigen::Vector3d &target_acc);
@@ -244,7 +246,7 @@ class geometricLoaded {
   Eigen::Vector3d control_Load_Position(const Eigen::Vector3d &target_pos, const Eigen::Vector3d &target_vel,
                                   const Eigen::Vector3d &target_acc);
   Eigen::Vector3d poscontroller(const Eigen::Vector3d &pos_error, const Eigen::Vector3d &vel_error);
-  Eigen::Vector3d pos_Load_controller(const Eigen::Vector3d &pos_error, const Eigen::Vector3d &vel_error);
+  Eigen::Vector3d pos_Load_controller(const Eigen::Vector3d &pos_error, const Eigen::Vector3d &vel_error, const Eigen::Vector3d &itg_error);
   Eigen::Vector4d attcontroller(const Eigen::Vector4d &ref_att, const Eigen::Vector3d &ref_acc,
                                 Eigen::Vector4d &curr_att);
   Eigen::Vector4d geometric_attcontroller(const Eigen::Quaterniond &ref_att, const Eigen::Vector3d &ref_acc,

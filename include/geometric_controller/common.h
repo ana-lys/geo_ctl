@@ -120,6 +120,15 @@ double H2VCoeff(Eigen::Vector3d v){
 Eigen::Vector3d reScaleMax(Eigen::Vector3d v, double nml){
 return v / std::max(v.norm()/nml,1.0);
 }
+void integral_handle(Eigen::Vector3d &integral, Eigen::Vector3d error, double dt, double ki_coeff ,double turn_head_coeff ,double rescale){
+Eigen::Vector3d weight = integral.cwiseProduct(error);
+for(int i =0; i< 3 ; i++){
+if(weight(i)>=1) weight(i) = ki_coeff; else weight(i) = ki_coeff * turn_head_coeff;}
+if(dt > 0.05) dt =0;
+Eigen::Vector3d integral_update = dt * weight.cwiseProduct(error);
+integral += integral_update;
+integral = reScaleMax( integral, rescale);
+}
 
 Eigen::Matrix3d quat2RotMatrix(const Eigen::Vector4d &q) {
   Eigen::Matrix3d rotmat;

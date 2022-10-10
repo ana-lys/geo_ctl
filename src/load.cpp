@@ -11,7 +11,7 @@ int main(int argc, char **argv)
   ros::Rate loop_rate(100);
   load_ground_truth = n.advertise<nav_msgs::Odometry>("load_ground_truth", 1 );
   base_ground_truth = n.advertise<nav_msgs::Odometry>("base_ground_truth", 1 );
-  while(true){
+  while(ros::ok()){
   ros::service::waitForService("gazebo/get_link_state");
   ros::ServiceClient client = n.serviceClient<gazebo_msgs::GetLinkState>("gazebo/get_link_state");
   gazebo_msgs::GetLinkState::Request request_load,request_body;
@@ -39,6 +39,7 @@ int main(int argc, char **argv)
   load_gc.twist.twist.linear.z = response_body.link_state.twist.linear.z;
   base_ground_truth.publish(load_gc);
   loop_rate.sleep();
+  ros::spinOnce();
   ROS_INFO_STREAM ("pos"<<response_load.link_state.pose.position.x - response_body.link_state.pose.position.x <<" "<<response_load.link_state.pose.position.y -response_body.link_state.pose.position.y<<" "<<response_load.link_state.pose.position.z-response_body.link_state.pose.position.z);
   }// ROS_INFO_STREAM ("vel"<<response_load.link_state.twist.linear.x<<" "<<response_load.link_state.twist.linear.y<<" "<<response_load.link_state.twist.linear.z);}
   return 0;

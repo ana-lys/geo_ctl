@@ -69,7 +69,7 @@
       <!-- p = 0.5 solo ,z =0.5 -->
       <arg name="Y" value="0"/>
   </include>
-
+  <node pkg="tf" type="static_transform_publisher" name="link1_broadcaster" args="0 0 0.2 0 0 0 1 base_link rplidar_link 0.01" />
   <!-- <group if="$(arg visualization)">
       <node type="rviz" name="rviz" pkg="rviz" args="-d $(find geometric_controller)/launch/config_file.rviz" />
   </group> -->
