@@ -63,10 +63,9 @@
 #include <sensor_msgs/BatteryState.h>
 #include <std_msgs/Float32.h>
 #include <Eigen/Dense>
-#include <quadrotor_msgs/PositionCommand.h>
 #include <visualization_msgs/Marker.h>
-#include "FlatTarget.h"
-#include "PositionCommand.h"
+#include <controller_msgs/FlatTarget.h>
+#include <controller_msgs/PositionCommand.h>
 #include <dynamic_reconfigure/server.h>
 #include <geometric_controller/GeometricControllerConfig.h>
 #include <std_srvs/SetBool.h>
@@ -124,7 +123,7 @@ class geometricLoaded {
   ros::Subscriber imuSub_,imuloadSub_,imu_physicalSub_,load_ground_truthSub_;
   ros::Subscriber yawreferenceSub_;
   ros::Publisher rotorVelPub_, angularVelPub_, target_pose_pub_;
-  ros::Publisher referencePosePub_;
+  ros::Publisher referencePosePub_,accPub_geometric,accPub_rotorTM,accPub_Orientation;
   ros::Publisher posehistoryPub_,loadhistoryPub_;
   ros::Publisher systemstatusPub_;
   ros::ServiceClient arming_client_;
@@ -144,7 +143,7 @@ class geometricLoaded {
   double quad_mass , load_mass ,cable_length ;
   int gps_enable = 1 ;
   bool velocity_yaw_;
-  double kp_rot_, kd_rot_;
+  double kp_rot_, kd_rot_ ,K_w_,K_xi_;
   double reference_request_dt_;
   double UTM_X,UTM_Y,UTM_HOME_X,UTM_HOME_Y;
   double attctrl_tau_;
@@ -157,6 +156,7 @@ class geometricLoaded {
   double drone_max_ver_acc =18.0;
   double start_norm_thrust = 0.2;
   double landing_loop = 1.0,last_yaw_X;
+  
   deque<marker> dq_markers;
   marker last_marker;
   mavros_msgs::State current_state_;
@@ -174,17 +174,18 @@ class geometricLoaded {
   double mavYaw_;
   Eigen::Vector3d g_;
   Eigen::Vector3d Start_pos,Start_kpos,Start_kvel;
-  Eigen::Quaterniond mavAtt_, q_des , q_load_des;
-  Eigen::Vector4d cmdBodyRate_;  //{wx, wy, wz, Thrust}
-  Eigen::Vector3d Kpos_, Kvel_, D_,Kpos_load,Kvel_load;
-  Eigen::Vector3d a0, a1, tau;
+  Eigen::Quaterniond mavAtt_, q_des , q_load_des ,q_tm_des;
+  Eigen::Vector4d cmdBodyRate_ , cmdBodyRate_tm;  //{wx, wy, wz, Thrust}
+  Eigen::Vector3d Kpos_, Kvel_, D_,Kpos_load,Kvel_load,K_xi,K_w;
+  Eigen::Vector3d a0, a1, tau ,Orrientation_feedback;
   Eigen::Vector3d globalPos_,gpsraw,gps_pos;
   Eigen::Vector3d globalVel_;
-  Eigen::Vector3d Imu_base,Imu_load_base,Imup_load_base,Imu_load_ang_vel,Imup_load_ang_vel;
+  Eigen::Vector3d Imu_base,Imu_load_base,Imup_load_base,load_omega,Imup_load_ang_vel;
+  Eigen::Matrix3d xi_xitranspose;
   Eigen::Quaterniond Imu_load_quat,Imup_load_quat;
   Eigen::Vector3d Load_accel,Loadp_accel,Load_pos_gth,Load_vel_gth;
   Eigen::Vector3d Imu_accel;
-  Eigen::Vector3d desired_acc,xi_dot;
+  Eigen::Vector3d desired_acc,xi,error_xi,error_omega;
   Eigen::Vector3d Imu_ang_vel;
   Eigen::Vector3d drag_accel,integral_error;
   Eigen::Vector4d globalAtt_;
@@ -210,7 +211,7 @@ class geometricLoaded {
   void odomCallback(const nav_msgs::OdometryConstPtr &odomMsg);
   void targetCallback(const geometry_msgs::TwistStamped &msg);
   void flattargetCallback(const controller_msgs::FlatTarget &msg);
-  void quad_msgsCallback(const quadrotor_msgs::PositionCommand &msg);
+  void quad_msgsCallback(const controller_msgs::PositionCommand &msg);
   void rotorTmCallback(const controller_msgs::PositionCommand &msg);
   void yawtargetCallback(const std_msgs::Float32 &msg);
   void landing_state_trigger(int state);
@@ -225,6 +226,7 @@ class geometricLoaded {
   void markerCallback(const geometry_msgs::PoseStamped &msg);
   void insert_marker_deque();
   void delete_marker_deque();
+  void rvisualize();
   void batteryCallback(const sensor_msgs::BatteryState &state);
   bool ctrltriggerCallback(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res);
   bool landCallback(std_srvs::SetBool::Request &request, std_srvs::SetBool::Response &response);
@@ -237,15 +239,18 @@ class geometricLoaded {
   int check_cross();
   geometry_msgs::PoseStamped vector3d2PoseStampedMsg(Eigen::Vector3d &position, Eigen::Vector4d &orientation);
   void computeBodyRateCmd(Eigen::Vector4d &bodyrate_cmd, const Eigen::Vector3d &target_acc);
+  void computeBodyRateCmd_rTM(Eigen::Vector4d &bodyrate_cmd, const Eigen::Vector3d &target_acc);
   void computeLoadQuatCmd(const Eigen::Vector3d &target_acc );
   void computeCableCmd(Eigen::Vector3d &load_target_acc , Eigen::Quaterniond &quat);
   double ToEulerYaw(const Eigen::Quaterniond& q); 
   Eigen::Vector3d controlPosition(const Eigen::Vector3d &target_pos, const Eigen::Vector3d &target_vel,
                                   const Eigen::Vector3d &target_acc);
   Eigen::Vector3d controlMarker();
+  Eigen::Vector3d control_Load_Orientation(Eigen::Vector3d &Position_feedback ,Eigen::Vector3d &xi ,Eigen::Vector3d &load_omega);
   Eigen::Vector3d control_Load_Position(const Eigen::Vector3d &target_pos, const Eigen::Vector3d &target_vel,
                                   const Eigen::Vector3d &target_acc);
   Eigen::Vector3d poscontroller(const Eigen::Vector3d &pos_error, const Eigen::Vector3d &vel_error);
+  Eigen::Vector3d xicontroller(const Eigen::Vector3d &xi_error, const Eigen::Vector3d &omega_error , const Eigen::Vector3d &Xi);
   Eigen::Vector3d pos_Load_controller(const Eigen::Vector3d &pos_error, const Eigen::Vector3d &vel_error, const Eigen::Vector3d &itg_error);
   Eigen::Vector4d attcontroller(const Eigen::Vector4d &ref_att, const Eigen::Vector3d &ref_acc,
                                 Eigen::Vector4d &curr_att);

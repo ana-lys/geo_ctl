@@ -9,10 +9,14 @@ find_package(catkin REQUIRED COMPONENTS
   dynamic_reconfigure
   tf
   mavros
-  quadrotor_msgs
   mavros_extras
   mavros_msgs
   mavlink
+  image_geometry
+  controller_msgs
+  image_transport
+  message_filters
+  cv_bridge
 )
 
 generate_dynamic_reconfigure_options(
@@ -22,7 +26,7 @@ generate_dynamic_reconfigure_options(
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES geometric_controller
-  CATKIN_DEPENDS roscpp rospy std_msgs mavros_msgs geometry_msgs sensor_msgs tf quadrotor_msgs
+  CATKIN_DEPENDS roscpp rospy std_msgs mavros_msgs geometry_msgs sensor_msgs tf image_geometry image_transport message_filters cv_bridge controller_msgs
 )
 
 #############
@@ -34,7 +38,9 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
 )
-
+add_library(depth_conversion
+  src/point_cloud_xyz.cpp
+)
 add_library(${PROJECT_NAME}
   src/geometric_controller.cpp
 )
@@ -44,13 +50,14 @@ add_library(geometric_loaded
 add_library(geometric_recorder
   src/geometric_recorder.cpp
 )
-
+add_dependencies(depth_conversion ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(geometric_controller ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(geometric_loaded  ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(geometric_recorder ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 ############
 # BINARIES #
 ############
+
 add_executable(geometric_controller_node
   src/geometric_controller_node.cpp
 )
@@ -70,10 +77,15 @@ add_executable(stat
 add_executable(load
   src/load.cpp
 )
+add_executable(depth_conversion_node
+  src/point_cloud_xyz_node.cpp
+)
+add_dependencies(depth_conversion_node depth_conversion ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(geometric_controller_node geometric_controller ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(geometric_loaded_node geometric_loaded ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(geometric_recorder_node geometric_recorder ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
+target_link_libraries(depth_conversion_node ${PROJECT_NAME} ${catkin_LIBRARIES})
 target_link_libraries(geometric_controller_node ${PROJECT_NAME} ${catkin_LIBRARIES})
 target_link_libraries(geometric_loaded_node geometric_loaded ${catkin_LIBRARIES})
 target_link_libraries(geometric_recorder_node geometric_recorder ${catkin_LIBRARIES})

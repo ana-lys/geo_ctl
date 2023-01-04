@@ -53,10 +53,13 @@ geometricCtrl::geometricCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &n
       node_state(WAITING_FOR_HOME_POSE) {
   referenceSub_ =
       nh_.subscribe("/OPT_points", 1, &geometricCtrl::optimalPointsCallback, this, ros::TransportHints().tcpNoDelay());
+  optimalPointsSub_ = nh_.subscribe("reference/flatsetpoint", 1, &geometricCtrl::flattargetCallback, this,
+                                    ros::TransportHints().tcpNoDelay());
   flatreferenceSub_ = nh_.subscribe("reference/flatsetpoint", 1, &geometricCtrl::flattargetCallback, this,
                                     ros::TransportHints().tcpNoDelay());
   quad_msgsSub_ = nh_.subscribe("/planning/pos_cmd", 1, &geometricCtrl::quad_msgsCallback, this,
                                     ros::TransportHints().tcpNoDelay());
+  marker_relative_Sub_ = nh_.subscribe("/aruco_detector/pose",1,&geometricCtrl::markerCallback, this, ros::TransportHints().tcpNoDelay());
   yawreferenceSub_ =
       nh_.subscribe("reference/yaw", 1, &geometricCtrl::yawtargetCallback, this, ros::TransportHints().tcpNoDelay());
   yawObstacleSub_ =
@@ -83,9 +86,6 @@ geometricCtrl::geometricCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &n
                                ros::TransportHints().tcpNoDelay());     
   angularVelPub_ = nh_.advertise<mavros_msgs::AttitudeTarget>("command/bodyrate_command", 1);
   referencePosePub_ = nh_.advertise<geometry_msgs::PoseStamped>("reference/pose", 1);
-  local_gps_pub = nh_.advertise<geometry_msgs::PoseStamped>("debug/localgps_pos", 1);
-  accel_command_pub = nh_.advertise<geometry_msgs::Point>("debug/accel_command", 1);
-  reference_pose_pub_ = nh_.advertise<geometry_msgs::Quaternion>("debug/pose_command", 1);
   target_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("mavros/setpoint_position/local", 10);
   posehistoryPub_ = nh_.advertise<nav_msgs::Path>("geometric_controller/path", 10);
   systemstatusPub_ = nh_.advertise<mavros_msgs::CompanionProcessStatus>("mavros/companion_process/status", 1);
@@ -116,7 +116,6 @@ geometricCtrl::geometricCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &n
   nh_private_.param<double>("Krp",  Krp_, 1.5);
   nh_private_.param<double>("Kyaw", Kyaw_, 2);
   nh_private_.param<int>("posehistory_window", posehistory_window_, 200);
-  nh_private_.param<int>("test", test_, 0); 
   nh_private_.param<double>("init_pos_x", initTargetPos_x_, 0.0);
   nh_private_.param<double>("init_pos_y", initTargetPos_y_, 0.0);
   nh_private_.param<double>("init_pos_z", initTargetPos_z_, 5.0);
@@ -124,7 +123,6 @@ geometricCtrl::geometricCtrl(const ros::NodeHandle &nh, const ros::NodeHandle &n
 
   Landing_velocity << 0.0, 0.0, Landing_velocity_*-1.0;
   targetPos_ << initTargetPos_x_, initTargetPos_y_, initTargetPos_z_;  // Initial Position
-  control_mask = 0;
   targetVel_ << 0.0, 0.0, 0.0;
   mavPos_ << 0.0, 0.0, 0.0;
   mavYaw_ = 0.0 ;
@@ -152,17 +150,15 @@ void geometricCtrl::gpsrawCallback(const sensor_msgs::NavSatFix &msg){
      gps_home(0) = msg.latitude;
      gps_home(1) = msg.longitude;
      gps_home(2) = msg.altitude ; 
-    LatLonToUTMXY(gps_home(0),gps_home(1),48,UTM_HOME_X,UTM_HOME_Y);//32 zurich 48 VietNam
+    LatLonToUTMXY(gps_home(0),gps_home(1),32,UTM_HOME_X,UTM_HOME_Y);//32 zurich 48 VietNam
   }
  gpsraw(0) = msg.latitude;
  gpsraw(1) = msg.longitude;
  gpsraw(2) = msg.altitude ;
- LatLonToUTMXY(gpsraw(0),gpsraw(1),48,UTM_X,UTM_Y); //32 zurich 48 VietNam
+ LatLonToUTMXY(gpsraw(0),gpsraw(1),32,UTM_X,UTM_Y); //32 zurich 48 VietNam
  gps_pos(0) = UTM_X-UTM_HOME_X;
  gps_pos(1) = UTM_Y-UTM_HOME_Y;
- gps_pos(2) = mavPos_(2);
- geometry_msgs::PoseStamped tx = toGeometry_msgs(gps_pos,mavAtt_);
- local_gps_pub.publish(tx);
+//  ROS_INFO_STREAM("you are at "<<std::setprecision(20)<<"X:"<<UTM_X-UTM_HOME_X<<"  Y:"<<UTM_Y-UTM_HOME_Y);
 }
 void geometricCtrl::imuCallback(const sensor_msgs::Imu &msg){
 Imu_base(0) = msg.linear_acceleration.x;
@@ -178,6 +174,17 @@ quat_imu.y()=msg.orientation.y;
 quat_imu.z()=msg.orientation.z;
 Imu_accel = quat_imu * Imu_base ;  
 // ROS_INFO_STREAM(Imu_accel+g_<<"imu_base");
+}
+
+void geometricCtrl::markerCallback(const geometry_msgs::PoseStamped &msg){
+ROS_INFO_STREAM("markerCallback");
+last_marker.relative_pose =toEigen(msg);
+last_marker.local_pose << msg.pose.orientation.x,msg.pose.orientation.y,msg.pose.orientation.z;
+last_marker.trust_coeff = msg.pose.orientation.w;
+last_marker.stamp = msg.header.stamp;
+last_marker_control = ros::Time::now();
+if(landing_commanded_) node_state = LANDING;
+insert_marker_deque();
 }
 
 void geometricCtrl::globalCallback(const nav_msgs::Odometry &msg){
@@ -242,7 +249,7 @@ void geometricCtrl::targetCallback(const geometry_msgs::TwistStamped &msg) {
   else
     targetAcc_ = Eigen::Vector3d::Zero();
 }
-void geometricCtrl::quad_msgsCallback(const controller_msgs::PositionCommand &msg) {
+void geometricCtrl::quad_msgsCallback(const quadrotor_msgs::PositionCommand &msg) {
   reference_request_last_ = reference_request_now_;
 
   targetPos_prev_ = targetPos_;
@@ -255,7 +262,6 @@ void geometricCtrl::quad_msgsCallback(const controller_msgs::PositionCommand &ms
   targetVel_ = toEigen(msg.velocity);
   targetAcc_ = toEigen(msg.acceleration);
   trajectoryYaw_ = double(msg.yaw);
-  ROS_INFO_STREAM(targetPos_);
 
 }
 
@@ -264,7 +270,7 @@ void geometricCtrl::flattargetCallback(const controller_msgs::FlatTarget &msg) {
 
   targetPos_prev_ = targetPos_;
   targetVel_prev_ = targetVel_;
-  control_mask = msg.type_mask;
+
   reference_request_now_ = ros::Time::now();
   reference_request_dt_ = (reference_request_now_ - reference_request_last_).toSec();
 
@@ -286,11 +292,6 @@ void geometricCtrl::flattargetCallback(const controller_msgs::FlatTarget &msg) {
     targetJerk_ = Eigen::Vector3d::Zero();
     targetSnap_ = Eigen::Vector3d::Zero();
 
-  }else if (msg.type_mask == 8) {
-    targetPos_ = Eigen::Vector3d::Zero();
-    targetAcc_ = toEigen(msg.acceleration);
-    targetJerk_ = Eigen::Vector3d::Zero();
-    targetSnap_ = Eigen::Vector3d::Zero();
   } else {
     targetAcc_ = toEigen(msg.acceleration);
     targetJerk_ = toEigen(msg.jerk);
@@ -339,7 +340,6 @@ void geometricCtrl::mavposeCallback(const geometry_msgs::PoseStamped &msg) {
     home_pose_ = msg.pose;
     ROS_INFO_STREAM("Home pose initialized to: " << home_pose_);
   }
-  if( test_!= 1)
   mavPos_ = toEigen(msg.pose.position); //- Eigen::Vector3d::UnitX() * 0.4 ;
   mavAtt_.w() = msg.pose.orientation.w;
   mavAtt_.x() = msg.pose.orientation.x;
@@ -348,10 +348,8 @@ void geometricCtrl::mavposeCallback(const geometry_msgs::PoseStamped &msg) {
 }
 
 void geometricCtrl::mavtwistCallback(const geometry_msgs::TwistStamped &msg) {
-  if(test_!=1){
   mavVel_ = toEigen(msg.twist.linear);
   mavRate_ = toEigen(msg.twist.angular);
-  }
 }
 
 bool geometricCtrl::landCallback(std_srvs::SetBool::Request &request, std_srvs::SetBool::Response &response) {
@@ -362,18 +360,28 @@ bool geometricCtrl::landCallback(std_srvs::SetBool::Request &request, std_srvs::
 void geometricCtrl::cmdloopCallback(const ros::TimerEvent &event) {
   switch (node_state) {
     case WAITING_FOR_HOME_POSE:
-      waitForPredicate(&received_home_pose , "Waiting for home pose...");
+      waitForPredicate(&received_home_pose, "Waiting for home pose...");
       ROS_INFO("Got pose! Drone Ready to be armed.");
+      // loadStartparams();
+      if(!load_control_)
+      norm_thrust_const_ = 0.06; 
       node_state = MISSION_EXECUTION;
       break;
     case MISSION_EXECUTION: {
       desired_acc = controlPosition(targetPos_, targetVel_, targetAcc_);
-      pubDebugInfo(desired_acc,targetPos_,norm_thrust_const_);
       computeBodyRateCmd(cmdBodyRate_, desired_acc);
       pubRateCommands(cmdBodyRate_, q_des);
+      ROS_INFO_STREAM(norm_thrust_const_);
       updates((ros::Time::now()-Flight_start).toSec(),mavPos_(0),mavPos_(1),mavPos_(2),norm_thrust_const_,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
       break;
     } 
+    case LANDING: {
+      delete_marker_deque();
+      desired_acc = controlMarker();
+      computeBodyRateCmd(cmdBodyRate_, desired_acc);
+      pubRateCommands(cmdBodyRate_, q_des);
+     break;
+    }
     case LANDED:
       ROS_INFO("Landed. Please set to position control and disarm.");
       cmdloop_timer_.stop();
@@ -408,13 +416,7 @@ void geometricCtrl::statusloopCallback(const ros::TimerEvent &event) {
   }
   pubSystemStatus();
 }
-void geometricCtrl::pubDebugInfo(const Eigen::Vector3d &acc_, const Eigen::Vector3d &pos_ , const double &kthrust){
-geometry_msgs::Point msg = toGeometry_msgs(acc_);
-accel_command_pub.publish(msg);
-geometry_msgs::Quaternion msg2 = toGeometry_msgs(pos_,kthrust);
-reference_pose_pub_.publish(msg2);
 
-}
 void geometricCtrl::pubRateCommands(const Eigen::Vector4d &cmd, const Eigen::Quaterniond &target_attitude) {
   mavros_msgs::AttitudeTarget msg;
 
@@ -454,13 +456,76 @@ Eigen::Vector3d geometricCtrl::controlPosition(const Eigen::Vector3d &target_pos
   const Eigen::Vector3d pos_error = mavPos_ - target_pos;// + load_pos_horizontal*0.1); 
   const Eigen::Vector3d vel_error = mavVel_ - target_vel ;
   // Position Controller
-  const Eigen::Vector3d a_fb = poscontroller(pos_error, vel_error,control_mask);
+  const Eigen::Vector3d a_fb = poscontroller(pos_error, vel_error);
+
   // Rotor Drag compensation
   const Eigen::Vector3d a_rd = Eigen::Vector3d::Zero();
+
   // Reference acceleration
   Eigen::Vector3d a_des = a_fb + a_ref - a_rd - g_;
   Eigen::Vector3d zb = mavAtt_ * Eigen::Vector3d::UnitZ();
   return a_des;
+}
+Eigen::Vector3d geometricCtrl::controlMarker() {
+  double integral_dt =(ros::Time::now() -last_marker_control).toSec();
+  Eigen::Vector3d marker_fb, temp;
+  for(int i = 0; i <dq_markers.size(); i++){
+  double delta_t = (ros::Time::now() - dq_markers.at(i).stamp).toSec();
+  double time_coeff =  pow((0.8 * sinc (2.0 * delta_t -3.0)-0.025),2);
+  //ROS_INFO_STREAM( i <<" " <<dq_markers.at(i).relative_pose(0) << " " << dq_markers.at(i).relative_pose(1) << " " << dq_markers.at(i).relative_pose(2) << " " << delta_t);
+  temp= dq_markers.at(i).trust_coeff * dq_markers.at(i).relative_pose * time_coeff ;
+  marker_fb += temp;
+  }
+  ROS_INFO_STREAM("Marker_fb"<<marker_fb(0)<<" "<<marker_fb(1)<<" "<<marker_fb(2));
+  Eigen::Vector3d vh_des = reScaleMax(tohorizontal(marker_fb),0.5);
+  Eigen::Vector3d vv_des ( 0.0 ,0.0, H2VCoeff(marker_fb));
+  Eigen::Vector3d a_fb = (vh_des + vv_des -mavVel_);
+  integral_marker = reScaleMax(integral_marker + a_fb * integral_dt,1.0);
+
+  Eigen::Vector3d a_des = a_fb - g_ ;// integral_marker ;
+  Eigen::Vector3d zb = mavAtt_ * Eigen::Vector3d::UnitZ();
+  last_marker_control =ros::Time::now();
+  updates((ros::Time::now()-Flight_start).toSec(),mavPos_(0),mavPos_(1),mavPos_(2),norm_thrust_const_,vv_des(1),vv_des(2),integral_marker(0),integral_marker(1),integral_marker(2),a_des(0),a_des(1),a_des(2),a_fb(0),a_fb(1),a_fb(2),marker_fb(0),marker_fb(1),marker_fb(2),0);
+  return a_des;
+}
+void geometricCtrl::insert_marker_deque(){
+ROS_INFO("insert");
+  if(dq_markers.size()==0){
+    dq_markers.push_front(last_marker);
+  }
+
+  else{
+  if((last_marker.stamp - dq_markers.at(0).stamp ).toSec() > 0 ){
+    dq_markers.push_front(last_marker);
+  }
+  }
+  
+  ROS_INFO_STREAM("update_marker_deque"<<dq_markers.size());
+}
+void geometricCtrl::delete_marker_deque(){
+  if(dq_markers.size()==0){
+    landing_state_trigger(0); 
+    return;
+  }
+  else while((ros::Time::now()-dq_markers.at(dq_markers.size()-1).stamp).toSec() > 3){
+    ROS_ERROR("f");
+    ROS_INFO_STREAM((ros::Time::now()-dq_markers.at(dq_markers.size()-1).stamp).toSec());
+    dq_markers.pop_back();
+    if(dq_markers.size()==0){
+    landing_state_trigger(0);
+    return;
+    }
+  }
+}
+void geometricCtrl::landing_state_trigger(int state){
+  ROS_INFO("landing_state_trigger");
+  if(state == 0){
+  integral_marker = Eigen::Vector3d::Zero();
+  targetPos_ = mavPos_;
+  targetVel_ = Eigen::Vector3d::Zero();
+  targetAcc_ = Eigen::Vector3d::Zero();
+  node_state = MISSION_EXECUTION;
+  }
 }
 double geometricCtrl::ToEulerYaw(const Eigen::Quaterniond& q){
     Vector3f angles;    //yaw pitch roll
@@ -523,22 +588,16 @@ Eigen::Vector3d geometricCtrl::computeRobustBodyXAxis(
   return x_B;
 }
 
-Eigen::Vector3d geometricCtrl::poscontroller(const Eigen::Vector3d &pos_error, const Eigen::Vector3d &vel_error , int control_mask_) {
-  Eigen::Vector3d a_fb;
-  if(control_mask == 0 ){
+Eigen::Vector3d geometricCtrl::poscontroller(const Eigen::Vector3d &pos_error, const Eigen::Vector3d &vel_error) {
   if(current_state_.mode == "OFFBOARD" && current_state_.armed)
   integral_handle(integral_error,-pos_error,0.01,0.05,32.0,1.0); 
-  a_fb = Kpos_.asDiagonal() * pos_error + Kvel_.asDiagonal() * vel_error ;//+ integral_error;  // feedforward term for trajectory error
-  // ROS_INFO_STREAM("pos_e"<<Kpos_.asDiagonal() * pos_error<<"vel_e"<<Kvel_.asDiagonal() * vel_error);
-  }
-  else if(control_mask == 8){
-  if(current_state_.mode == "OFFBOARD" && current_state_.armed)
-  integral_handle(integral_error,-vel_error,0.01,0.02,16.0,1.0); 
-  a_fb = Kvel_.asDiagonal() * vel_error + integral_error;  // feedforward term for trajectory error
-  }
+  // ROS_INFO_STREAM(integral_error(0)<<" "<<integral_error(1)<<" "<<integral_error(2)<<" ");
+  Eigen::Vector3d a_fb =
+      Kpos_.asDiagonal() * pos_error + Kvel_.asDiagonal() * vel_error + integral_error;  // feedforward term for trajectory error
+
   if (a_fb.norm() > max_fb_acc_)
     a_fb = (max_fb_acc_ / a_fb.norm()) * a_fb;  // Clip acceleration if reference is too large
-  
+
   return a_fb;
 }
 Eigen::Vector4d geometricCtrl::geometric_attcontroller(const Eigen::Quaterniond &ref_att, const Eigen::Vector3d &ref_acc,
@@ -610,7 +669,7 @@ void geometricCtrl::dynamicReconfigureCallback(geometric_controller::GeometricCo
   }
   else if (Kyaw_ != config.Kyaw) {
     Kyaw_ = config.Kyaw;
-    ROS_INFO("Reconfigure request : Kyaw  = %.2f  ", config.Kyaw);
+    ROS_INFO("Reconfigure request : Kv_z  = %.2f  ", config.Kyaw);
   }
   else if (norm_thrust_const_ != config.Thrust) {
     norm_thrust_const_ = config.Thrust;

@@ -52,6 +52,9 @@ geometricLoaded::geometricLoaded(const ros::NodeHandle &nh, const ros::NodeHandl
       landing_commanded_(false),
       feedthrough_enable_(false),
       node_state(WAITING_FOR_HOME_POSE) {
+  accPub_geometric= nh_.advertise<visualization_msgs::Marker>( "accGeometric", 0 );
+  accPub_rotorTM= nh_.advertise<visualization_msgs::Marker>( "accRotorTM", 0 );
+  accPub_Orientation= nh_.advertise<visualization_msgs::Marker>( "accOrientation", 0 );
   referenceSub_ =
       nh_.subscribe("reference/setpoint", 1, &geometricLoaded::targetCallback, this, ros::TransportHints().tcpNoDelay());
   flatreferenceSub_ = nh_.subscribe("reference/flatsetpoint", 1, &geometricLoaded::flattargetCallback, this,
@@ -131,8 +134,10 @@ geometricLoaded::geometricLoaded(const ros::NodeHandle &nh, const ros::NodeHandl
   targetVel_ << 0.0, 0.0, 0.0;
   mavPos_ << 0.0, 0.0, 0.0;
   mavVel_ << 0.0, 0.0, 0.0;
+  K_xi << 2.0 , 2.0 ,2.0 ;
+  K_w << 2.0 , 2.0  ,2.0 ;
   g_ << 0.0, 0.0, -9.8;
-  Start_pos << 0.0 ,0.0 , 2.0 ;
+  Start_pos << 0.0 ,0.0 , 3.0 ;
   Start_kpos << -2.0 , -2.0 , -2.0 ;
   Start_kvel << -4.0 , -4.0 , -6.0 ;
   Kpos_ << -Kpos_x_, -Kpos_y_, -Kpos_z_;
@@ -205,11 +210,13 @@ void geometricLoaded::imuloadCallback(const sensor_msgs::Imu &msg){
 //
 Imu_load_base = toEigen(msg.linear_acceleration);
 Imu_load_quat = toEigen(msg.orientation);
-Imu_load_ang_vel = toEigen(msg.angular_velocity);
+load_omega = toEigen(msg.angular_velocity);
 Load_accel = Imu_load_quat * Imu_load_base + g_ ;
 Eigen::Vector3d relative = Imu_load_quat * Eigen::Vector3d::UnitZ() * -cable_length;
-Eigen::Vector3d relative_vel = Imu_load_ang_vel.cross(relative);
+Eigen::Vector3d relative_vel = load_omega.cross(relative);
 // ROS_INFO_STREAM("relative_vel "<< relative_vel(0) << " "<< relative_vel(1) << " "<< relative_vel(2));
+xi = Imu_load_quat * Eigen::Vector3d::UnitZ() * -1;
+xi_xitranspose = xi * xi.transpose();
 Load_pos = mavPos_ + relative;
 Load_vel = mavVel_ + relative_vel;
 }
@@ -272,7 +279,7 @@ void geometricLoaded::flattargetCallback(const controller_msgs::FlatTarget &msg)
     targetSnap_ = toEigen(msg.snap);
   }
 }
-void geometricLoaded::quad_msgsCallback(const quadrotor_msgs::PositionCommand &msg) {
+void geometricLoaded::quad_msgsCallback(const controller_msgs::PositionCommand &msg) {
 
   reference_request_now_ = ros::Time::now();
   targetPos_ = toEigen(msg.position);
@@ -283,13 +290,13 @@ void geometricLoaded::quad_msgsCallback(const quadrotor_msgs::PositionCommand &m
 
 void geometricLoaded::rotorTmCallback(const controller_msgs::PositionCommand &msg) {
 
-  reference_request_now_ = ros::Time::now();
-  targetPos_ = toEigen(msg.position);
-  targetVel_ = toEigen(msg.velocity);
-  targetAcc_ = toEigen(msg.acceleration);
-  Eigen::Quaterniond quatTM;
-  quatTM =toEigen(msg.quaternion);
-  mavYaw_ = quatTM.toRotationMatrix().eulerAngles(0, 1, 2)(2);
+  // reference_request_now_ = ros::Time::now();
+  // targetPos_ = toEigen(msg.position);
+  // targetVel_ = toEigen(msg.velocity);
+  // targetAcc_ = toEigen(msg.acceleration);
+  // Eigen::Quaterniond quatTM;
+  // quatTM =toEigen(msg.quaternion);
+  // mavYaw_ = quatTM.toRotationMatrix().eulerAngles(0, 1, 2)(2);
 }
 
 void geometricLoaded::yawtargetCallback(const std_msgs::Float32 &msg) {
@@ -364,11 +371,17 @@ void geometricLoaded::cmdloopCallback(const ros::TimerEvent &event) {
     }
      case LOAD_MISSION: {
       Eigen::Vector3d Load_des_acc = control_Load_Position(targetPos_, targetVel_, targetAcc_);
+      Eigen::Vector3d Position_feedback = xi_xitranspose * Load_des_acc * (quad_mass + load_mass) /quad_mass;
+      Orrientation_feedback = control_Load_Orientation(Position_feedback , xi , load_omega);
+      ROS_INFO_STREAM("orientation_feedback " <<Orrientation_feedback(0)<<" " <<Orrientation_feedback(1)<<" " <<Orrientation_feedback(2));
+      Eigen::Vector3d rtm_desired_acc = Position_feedback + Orrientation_feedback;
       computeLoadQuatCmd(Load_des_acc);    
       computeCableCmd(Load_des_acc,q_load_des);
       //ROS_INFO_STREAM("desired_acc"<<" "<<desired_acc(0)<<" "<<desired_acc(1)<<" "<<desired_acc(2));
       computeBodyRateCmd(cmdBodyRate_, desired_acc);
+      computeBodyRateCmd_rTM(cmdBodyRate_tm, rtm_desired_acc);
       pubRateCommands(cmdBodyRate_, q_des);
+      rvisualize();
       appendPoseHistory();
       pubPoseHistory();
       double time = (ros::Time::now() -Flight_start).toSec();
@@ -460,6 +473,15 @@ Eigen::Vector3d geometricLoaded::controlPosition(const Eigen::Vector3d &target_p
   Eigen::Vector3d zb = mavAtt_ * Eigen::Vector3d::UnitZ();
   return a_des;
 }
+
+Eigen::Vector3d geometricLoaded::control_Load_Orientation( Eigen::Vector3d &PosFB, Eigen::Vector3d &Xi, Eigen::Vector3d &Omega) {
+  Eigen::Vector3d Error_xi = (-PosFB.normalized()).cross(xi);
+  Eigen::Vector3d Error_omega = Omega;
+  ROS_INFO_STREAM("error_xi"<<Error_xi(0)<<" "<<Error_xi(1)<<" "<<Error_xi(2));
+  Eigen::Vector3d attfb = xicontroller(Error_xi , Error_omega , Xi);
+  return attfb;
+}
+
 Eigen::Vector3d geometricLoaded::control_Load_Position(const Eigen::Vector3d &target_pos, const Eigen::Vector3d &target_vel,
                                                const Eigen::Vector3d &target_acc) {
   const Eigen::Vector3d a_ref = target_acc;
@@ -528,9 +550,29 @@ void geometricLoaded::computeBodyRateCmd(Eigen::Vector4d &bodyrate_cmd, const Ei
   q_des = desired_attitude;
   bodyrate_cmd = geometric_attcontroller(q_des, a_des, mavAtt_);  // Calculate BodyRate
 }
+void geometricLoaded::computeBodyRateCmd_rTM(Eigen::Vector4d &bodyrate_cmd, const Eigen::Vector3d &a_des) {
+  // Reference attitude
+  Eigen::Quaterniond q_heading = Eigen::Quaterniond(
+      Eigen::AngleAxisd(mavYaw_, Eigen::Vector3d::UnitZ()));
+  Eigen::Vector3d x_C = q_heading * Eigen::Vector3d::UnitX();
+  Eigen::Vector3d y_C = q_heading * Eigen::Vector3d::UnitY();
+  Eigen::Vector3d z_B;
+  if(a_des.norm()<0.01){
+    z_B = mavAtt_ * Eigen::Vector3d::UnitZ();
+  }
+  else z_B = a_des.normalized();
+  const Eigen::Vector3d x_B_prototype = y_C.cross(z_B);
+  const Eigen::Vector3d x_B =
+      computeRobustBodyXAxis(x_B_prototype, x_C, y_C, mavAtt_);
+  const Eigen::Vector3d y_B = (z_B.cross(x_B)).normalized();
+  const Eigen::Matrix3d R_W_B((Eigen::Matrix3d() << x_B, y_B, z_B).finished());
+  Eigen::Quaterniond desired_attitude(R_W_B);
+  q_tm_des = desired_attitude;
+  cmdBodyRate_tm = geometric_attcontroller(q_tm_des, a_des, mavAtt_);  // Calculate BodyRate
+}
 void geometricLoaded::computeCableCmd(Eigen::Vector3d &a_des, Eigen::Quaterniond &q_quad_des) {
   Eigen::Vector3d quad_pos_target =  targetPos_+  q_quad_des * Eigen::Vector3d::UnitZ() * cable_length;
-  Eigen::Vector3d load_ang_vel_error = Eigen::Quaterniond(0,)
+  // Eigen::Vector3d load_ang_vel_error = Eigen::Quaterniond(0,)
   // Eigen::Vector3d qload_error =  (q_quad_des * Eigen::Vector3d::UnitZ()).cross(Imu_load_quat * Eigen::Vector3d::UnitZ());
   // ROS_INFO_STREAM("qload_error "<<qload_error(0)<<" "<<qload_error(1)<<" "<<qload_error(2));
   Eigen::Vector3d quad_vel_target = ( targetVel_ * (quad_mass + load_mass) - Load_vel * load_mass ) / quad_mass ;
@@ -562,6 +604,12 @@ Eigen::Vector3d geometricLoaded::computeRobustBodyXAxis(
     x_B.normalize();
   }
   return x_B;
+}
+Eigen::Vector3d geometricLoaded::xicontroller(const Eigen::Vector3d &xi_error, const Eigen::Vector3d &omega_error ,const Eigen::Vector3d &Xi) {
+  Eigen::Vector3d pre_transformFB =  xi_error.cwiseProduct(K_xi) + omega_error.cwiseProduct(K_w);  // feedforward term for trajectory error
+  ROS_INFO_STREAM("pre_transformFB "<<pre_transformFB(0)<<" "<<pre_transformFB(1)<<" "<<pre_transformFB(2));
+  Eigen::Vector3d post_transformFB = - Xi.cross(pre_transformFB)*cable_length;
+  return post_transformFB;
 }
 
 Eigen::Vector3d geometricLoaded::poscontroller(const Eigen::Vector3d &pos_error, const Eigen::Vector3d &vel_error) {
@@ -632,7 +680,7 @@ Kpos_ << -Kpos_x_, -Kpos_y_, -Kpos_z_;
 Kvel_ << -Kvel_x_, -Kvel_y_, -Kvel_z_;
 krp = Krp_;
 targetPos_ << initTargetPos_x_, initTargetPos_y_, initTargetPos_z_;
-norm_thrust_const_ = cross_average / 9.8 / (1.0 +load_mass/ quad_mass);
+norm_thrust_const_ = cross_average / 9.8 / (1.0 + load_mass/ quad_mass);
 ROS_INFO_STREAM("n_T_const"<<norm_thrust_const_);
 }
 
@@ -685,7 +733,52 @@ geometry_msgs::PoseStamped geometricLoaded::vector3d2PoseStampedMsg(Eigen::Vecto
   encode_msg.pose.position.z = position(2);
   return encode_msg;
 }
+void geometricLoaded::rvisualize(){
+visualization_msgs::Marker marker;
+marker.header.frame_id = "map";
+marker.header.stamp = ros::Time();
+marker.ns = "accelerations";
+marker.id = 0;
+marker.type = visualization_msgs::Marker::CYLINDER;;
+marker.action = visualization_msgs::Marker::ADD;
+Eigen::Vector3d vector = q_des * Eigen::Vector3d::UnitZ() *cmdBodyRate_(3);
+marker.pose.position.x = vector(0)/2;
+marker.pose.position.y = vector(1)/2;
+marker.pose.position.z = vector(2)/2;
+marker.pose.orientation = toGeometry_msgs(q_des);
+marker.scale.x = 0.1;
+marker.scale.y = 0.1;
+marker.scale.z = cmdBodyRate_(3);
+marker.color.a = 1.0; // Don't forget to set the alpha!
+marker.color.r = 0.0;
+marker.color.g = 1.0;
+marker.color.b = 0.0;
+accPub_geometric.publish( marker);
+vector = q_tm_des * Eigen::Vector3d::UnitZ() *cmdBodyRate_tm(3);
+marker.pose.position.x = vector(0)/2;
+marker.pose.position.y = vector(1)/2;
+marker.pose.position.z = vector(2)/2;
+marker.pose.orientation = toGeometry_msgs(q_tm_des);
+marker.scale.z = cmdBodyRate_tm(3);
+marker.color.r = 1.0;
+marker.color.g = 0.0;
+accPub_rotorTM.publish( marker);
+Eigen::Vector3d o = Orrientation_feedback.normalized();
+Eigen::Quaterniond q = Eigen::Quaterniond::FromTwoVectors(Eigen::Vector3d::UnitZ(),o);
+ROS_INFO_STREAM("orientation_feedback " <<Orrientation_feedback(0)<<" " <<Orrientation_feedback(1)<<" " <<Orrientation_feedback(2));
+ROS_INFO_STREAM("quaternion "<<q.w()<<" "<<q.x()<<" "<<q.y()<<" "<<q.z()<<" ");
+vector = q * Eigen::Vector3d::UnitZ() * Orrientation_feedback.norm();
+marker.pose.position.x = vector(0)/2;
+marker.pose.position.y = vector(1)/2;
+marker.pose.position.z = vector(2)/2;
+marker.pose.orientation = toGeometry_msgs(q);
+marker.scale.z = Orrientation_feedback.norm();
+marker.color.r = 0.0;
+marker.color.g = 0.0;
+marker.color.b = 1.0;
+accPub_Orientation.publish( marker);
 
+}
 void geometricLoaded::dynamicReconfigureCallback(geometric_controller::GeometricControllerConfig &config,
                                                uint32_t level) {
   if (max_fb_acc_ != config.max_acc) {
@@ -708,6 +801,13 @@ void geometricLoaded::dynamicReconfigureCallback(geometric_controller::Geometric
     ROS_INFO("Reconfigure request : Kv_y =%.2f  ", config.Kv_y);
   } else if (Kvel_z_ != config.Kv_z) {
     Kvel_z_ = config.Kv_z;
+    ROS_INFO("Reconfigure request : Kv_z  = %.2f  ", config.Kv_z);
+  }
+  else if (K_w_ != config.K_w) {
+    K_w_ = config.K_w;
+    ROS_INFO("Reconfigure request : K_w =%.2f  ", config.K_w);
+  } else if (K_xi_ != config.K_xi) {
+    K_xi_ = config.K_xi;
     ROS_INFO("Reconfigure request : Kv_z  = %.2f  ", config.Kv_z);
   }
   else if (Kpos_load_xy != config.Kpl_xy) {
@@ -738,7 +838,8 @@ void geometricLoaded::dynamicReconfigureCallback(geometric_controller::Geometric
     norm_thrust_const_ = config.Thrust;
     ROS_INFO("Reconfigure request : Thrust  = %.2f  ", config.Thrust);
   }
-
+  K_xi << K_xi_,K_xi_,K_xi_;
+  K_w << K_w_,K_w_,K_w_;
   Kpos_ << -Kpos_x_, -Kpos_y_, -Kpos_z_;
   Kvel_ << -Kvel_x_, -Kvel_y_, -Kvel_z_;
   Kpos_load << -Kpos_load_xy, -Kpos_load_xy ,-Kpos_load_z;

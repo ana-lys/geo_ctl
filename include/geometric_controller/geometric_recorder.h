@@ -65,7 +65,7 @@
 #include <Eigen/Dense>
 
 #include <visualization_msgs/Marker.h>
-#include "FlatTarget.h"
+#include <controller_msgs/FlatTarget.h>
 #include <dynamic_reconfigure/server.h>
 #include <geometric_controller/GeometricControllerConfig.h>
 #include <std_srvs/SetBool.h>

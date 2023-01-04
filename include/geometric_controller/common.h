@@ -98,7 +98,47 @@ inline double sinc ( double x )
     return 1;
   return sin ( x ) / ( x );
 }
-
+geometry_msgs::Quaternion toGeometry_msgs( Eigen::Vector3d v , double w){
+  geometry_msgs::Quaternion q;
+  q.w = w;
+  q.x = v(0);
+  q.y = v(1);
+  q.z = v(2);
+  return q;
+}
+geometry_msgs::Quaternion toGeometry_msgs( Eigen::Quaterniond e){
+  geometry_msgs::Quaternion q;
+  q.w = e.w();
+  q.x = e.x();
+  q.y = e.y();
+  q.z = e.z();
+  return q;
+}
+geometry_msgs::Point toGeometry_msgs( const geometry_msgs::Vector3 &v3 ){
+ geometry_msgs::Point r;
+ r.x =v3.x ;
+ r.y =v3.y ;
+ r.z =v3.z ;
+ return r;
+}
+geometry_msgs::Point toGeometry_msgs( const Eigen::Vector3d &v3 ){
+ geometry_msgs::Point r;
+ r.x =v3(0) ;
+ r.y =v3(1) ;
+ r.z =v3(2) ;
+ return r;
+}
+geometry_msgs::PoseStamped toGeometry_msgs( const Eigen::Vector3d &v3 , const Eigen::Quaterniond &q4 ){
+ geometry_msgs::PoseStamped r;
+ r.pose.position.x =v3(0) ;
+ r.pose.position.y =v3(1) ;
+ r.pose.position.z =v3(2) ;
+ r.pose.orientation.x = q4.x();
+ r.pose.orientation.y = q4.y();
+ r.pose.orientation.z = q4.z();
+ r.pose.orientation.w = q4.w();
+ return r;
+}
 inline Eigen::Vector3d toEigen(const geometry_msgs::Vector3 &v3) {
   Eigen::Vector3d ev3(v3.x, v3.y, v3.z);
   return ev3;
@@ -120,15 +160,39 @@ double H2VCoeff(Eigen::Vector3d v){
 Eigen::Vector3d reScaleMax(Eigen::Vector3d v, double nml){
 return v / std::max(v.norm()/nml,1.0);
 }
+double reScaleMax(double v, double nml){
+return std::max(v , nml);
+}
 void integral_handle(Eigen::Vector3d &integral, Eigen::Vector3d error, double dt, double ki_coeff ,double turn_head_coeff ,double rescale){
+
 Eigen::Vector3d weight = integral.cwiseProduct(error);
 for(int i =0; i< 3 ; i++){
-if(weight(i)>=1) weight(i) = ki_coeff; else weight(i) = ki_coeff * turn_head_coeff;}
+if(weight(i) >= 0 || fabs(error(i)) <0.1 ) weight(i) = ki_coeff;
+else weight(i) = ki_coeff * turn_head_coeff;}
 if(dt > 0.05) dt =0;
 Eigen::Vector3d integral_update = dt * weight.cwiseProduct(error);
 integral += integral_update;
 integral = reScaleMax( integral, rescale);
 }
+void integral_handle(double &integral, double error, double dt, double ki_coeff ,double turn_head_coeff ,double rescale){
+double weight = integral *error ;
+if(weight >= 0 || fabs(error) < 0.1 ) weight = ki_coeff; 
+else weight = ki_coeff * turn_head_coeff;
+if(dt > 0.05) dt =0;
+double integral_update = dt * weight * error;
+integral += integral_update;
+integral = integral / std::max(1.0,fabs(integral)/rescale);
+}
+void discrete_integral_handle(double &integral, double error, double dt, double ki_coeff ,double turn_head_coeff ,double rescale){
+double weight = integral *error ;
+if(weight >= 0|| fabs(error) < 0.1 ) weight = ki_coeff; 
+else weight = ki_coeff * turn_head_coeff;
+if(dt > 0.05) dt =0;
+double integral_update = dt * weight * error;
+integral += integral_update;
+integral = integral / std::max(1.0,fabs(integral)/rescale);
+}
+
 
 Eigen::Matrix3d quat2RotMatrix(const Eigen::Vector4d &q) {
   Eigen::Matrix3d rotmat;
@@ -173,5 +237,29 @@ Eigen::Vector4d rot2Quaternion(const Eigen::Matrix3d &R) {
   }
   return quat;
 }
+
+class Gauss_pdf{
+private: 
+
+float mean = 0 ;
+float sigma = 0.75;
+constexpr static const float inv_sqrt_2pi = 0.3989422804014327;
+
+public:
+Gauss_pdf() {}
+Gauss_pdf(float mean_ , float sigma_){
+  mean = mean_;
+  sigma = sigma_;
+}
+~Gauss_pdf(){}
+
+float normal_pdf (float x)
+{
+    
+    float a = (x - mean) / sigma;
+
+    return inv_sqrt_2pi / sigma * std::exp(-0.5f * a * a);
+}
+};
 
 #endif
