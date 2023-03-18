@@ -60,33 +60,34 @@
 #include <mavros_msgs/CompanionProcessStatus.h>
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/State.h>
-#include <nav_msgs/Odometry.h>
-#include <nav_msgs/Path.h>
-#include <sensor_msgs/BatteryState.h>
+#include <mavros_msgs/RCIn.h>
+#include <mavros_msgs/PositionTarget.h>
+
 #include <std_msgs/Float32.h>
 #include <Eigen/Dense>
-#include <controller_msgs/PositionCommand.h>
+
 
 #include <visualization_msgs/Marker.h>
 #include <controller_msgs/FlatTarget.h>
-#include <dynamic_reconfigure/server.h>
-#include <geometric_controller/GeometricControllerConfig.h>
-#include <std_srvs/SetBool.h>
+#include <controller_msgs/PositionCommand.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 #include <trajectory_msgs/MultiDOFJointTrajectoryPoint.h>
 
+#include <dynamic_reconfigure/server.h>
+
+#include <geometric_controller/GeometricControllerConfig.h>
+#include <geometric_controller/common.h>
+#include <geometric_controller/UTM.h>
+#include <geometric_controller/logging_lib.cpp>
+#include <std_srvs/SetBool.h>
+
+#include <nav_msgs/Odometry.h>
+#include <nav_msgs/Path.h>
+#include <sensor_msgs/BatteryState.h>
 #include <sensor_msgs/NavSatFix.h>
 #include <sensor_msgs/Imu.h>
 
-#include "geometric_controller/common.h"
-#include "UTM.h"
-#include "logging_lib.cpp"
-#include <cmath>
-#include <deque>
 
-#define ERROR_QUATERNION 1
-#define ERROR_GEOMETRIC 2
-#define RPG_CONTROLLER 3
 
 using namespace std;
 using namespace Eigen;
@@ -121,12 +122,12 @@ class geometricCtrl {
   ros::Subscriber gpsrawSub_;
   ros::Subscriber global_poseSub_;
   ros::Subscriber marker_relative_Sub_;
-  ros::Subscriber mavposeSub_, gzmavposeSub_;
+  ros::Subscriber mavposeSub_, mavrcSubs_ , gzmavposeSub_;
   ros::Subscriber mavtwistSub_,batterySub_;
   ros::Subscriber imuSub_,imuloadSub_,imu_physicalSub_,load_ground_truthSub_;
   ros::Subscriber yawreferenceSub_,yawObstacleSub_;
-  ros::Publisher rotorVelPub_, angularVelPub_, target_pose_pub_ , local_gps_pub , accel_command_pub , reference_pose_pub_;
-  ros::Publisher referencePosePub_;
+  ros::Publisher setpoint_raw_Pub, rotorVelPub_, angularVelPub_, target_pose_pub_ , local_gps_pub , accel_command_pub , reference_pose_pub_;
+  ros::Publisher referencePosePub_,rvisualize_pub;
   ros::Publisher posehistoryPub_;
   ros::Publisher systemstatusPub_;
   ros::ServiceClient arming_client_;
@@ -134,14 +135,14 @@ class geometricCtrl {
   ros::ServiceServer ctrltriggerServ_;
   ros::ServiceServer land_service_;
   ros::Timer cmdloop_timer_, statusloop_timer_ , yaw_planner_timer_ ;
-  ros::Time Cable_loop,Flight_start,last_request_, reference_request_now_, reference_request_last_ , last_landing_request ,last_load_time,last_physical_load_time, last_landing_command ,last_marker_control;
+  ros::Time Cable_loop,Flight_start,last_request_ , last_landing_request ,last_load_time,last_physical_load_time, last_landing_command ,last_marker_control;
   string mav_name_;
   bool fail_detec_, ctrl_enable_, feedthrough_enable_,load_control_;
-  int ctrl_mode_,control_mask;
+  int ctrl_mode_;
   int cross_status,cross_counter;
   double cross_sum,cross_average,cross_last; 
-  bool landing_commanded_,landing_detected = false,Basending_thrust = true ;
-  bool sim_enable_;
+  bool landing_commanded_,landing_detected = false, Basending_thrust = true , targetStarted =false ;
+  bool sim_enable_, rcHold  ;
   int landing = 0;
   int gps_enable = 1 ;
   int test_ = 0;
@@ -150,22 +151,27 @@ class geometricCtrl {
   double reference_request_dt_;
   double UTM_X,UTM_Y,UTM_HOME_X,UTM_HOME_Y;
   double attctrl_tau_;
-  double norm_thrust_const_, norm_thrust_offset_;
+  double norm_thrust_const_, norm_thrust_integral_ , norm_thrust_derivative_;
   double max_fb_acc_;
   double dx_, dy_, dz_;
   double last_yaw_ref = 0;
+  double Kint_t_,Kder_t_;
   double drone_max_accel =25.0;
   double k_thrust_horz = 0 ;
   double drone_max_ver_acc =18.0;
   double start_norm_thrust = 0.2;
   double landing_loop = 1.0,last_yaw_X;
-  deque<marker> dq_markers;
+  std::deque<marker> dq_markers;
   vector<Eigen::Vector3d> Optimal_points;
-  marker last_marker;
   mavros_msgs::State current_state_;
   mavros_msgs::SetMode offb_set_mode_;
   mavros_msgs::CommandBool arm_cmd_;
   std::vector<geometry_msgs::PoseStamped> posehistory_vector_;
+  std::deque<double> oscillation_history;
+  std::deque<double> oscillation_high_peak; 
+  std::deque<double> oscillation_low_peak;
+  std::deque<double> oscillation_high_peak_time;
+  std::deque<double> oscillation_low_peak_time;
   MAV_STATE companion_state_ = MAV_STATE::MAV_STATE_ACTIVE;
   
   double initTargetPos_x_, initTargetPos_y_, initTargetPos_z_;
@@ -174,11 +180,12 @@ class geometricCtrl {
   Eigen::Vector3d last_ref_acc_{Eigen::Vector3d::Zero()};
   Eigen::Vector3d landing_vel,landing_pos;
   Eigen::Vector3d integral_marker;
-  double mavYaw_,yawObstacle,yawObstacle_integral,trajectoryYaw_;
+  double yaw_velocity;
+  double mavYaw_,mavVelYaw_,yawObstacle,yawObstacle_integral,trajectoryYaw_;
   Eigen::Vector3d g_;
   Eigen::Quaterniond mavAtt_, q_des , q_load_des;
   Eigen::Vector4d cmdBodyRate_;  //{wx, wy, wz, Thrust}
-  Eigen::Vector3d Kpos_, Kvel_, D_,Kpos_load,Kvel_load;
+  Eigen::Vector3d Kpos_, Kvel_, D_, Kint_;
   Eigen::Vector3d a0, a1, tau;
   Eigen::Vector3d globalPos_,gpsraw,gps_pos;
   Eigen::Vector3d globalVel_;
@@ -188,7 +195,7 @@ class geometricCtrl {
   Eigen::Vector3d Imu_accel;
   Eigen::Vector3d desired_acc;
   Eigen::Vector3d Imu_ang_vel;
-  Eigen::Vector3d drag_accel,integral_error;
+  Eigen::Vector3d drag_accel,integral_error,last_integral_error;
   Eigen::Vector4d globalAtt_;
   Eigen::Vector3d Load_pos,Loadp_pos,Load_vel,Loadp_vel,Last_quad_target_pos = Eigen::Vector3d::Zero();
   Eigen::Vector3d Landing_velocity,Landing_last_horizontal_error;
@@ -197,7 +204,7 @@ class geometricCtrl {
   float battery_voltage;
   double thrust_estimator = 0,Throttle;
   double krp = 2.0, kyaw = 2.0, kvel_landing = 7,kpos_landing = 3;
-  double Kpos_x_, Kpos_y_, Kpos_z_, Kvel_x_, Kvel_y_, Kvel_z_ , Krp_ , Kyaw_;
+  double Kpos_x_, Kpos_y_, Kpos_z_, Kvel_x_, Kvel_y_, Kvel_z_, Kint_x_ ,Kint_y_ ,Kint_z_, Krp_ , Kyaw_;
   int posehistory_window_;
   bool done_thrust_calib = false;
   void imuCallback(const sensor_msgs::Imu &msg);
@@ -207,10 +214,13 @@ class geometricCtrl {
   void globalCallback(const nav_msgs::Odometry &msg);
   void gpsrawCallback(const sensor_msgs::NavSatFix &msg);
   void pubRateCommands(const Eigen::Vector4d &cmd, const Eigen::Quaterniond &target_attitude);
-  void pubDebugInfo(const Eigen::Vector3d &cmd , const Eigen::Vector3d &pos , const double &kthrust);
+  void pubDebugInfo(const Eigen::Vector3d &cmd , const Eigen::Vector3d &pos , const Eigen::Vector3d &vel);
   void pubReferencePose(const Eigen::Vector3d &target_position, const Eigen::Vector4d &target_attitude);
   void pubPoseHistory();
   void pubSystemStatus();
+  void rvisualize();
+  void rawsetpointPub(const bool started, const Eigen::Vector3d &accelration ,const double yawvel);
+  void ziegler_nichols(int n);
   void odomCallback(const nav_msgs::OdometryConstPtr &odomMsg);
   void targetCallback(const geometry_msgs::TwistStamped &msg);
   void optimalPointsCallback(const geometry_msgs::PoseArray &msg);
@@ -225,6 +235,7 @@ class geometricCtrl {
   void cmdloopCallback(const ros::TimerEvent &event);
   void mavstateCallback(const mavros_msgs::State::ConstPtr &msg);
   void mavposeCallback(const geometry_msgs::PoseStamped &msg);
+  void rcCallback(const mavros_msgs::RCIn &msg);
   void mavtwistCallback(const geometry_msgs::TwistStamped &msg);
   void statusloopCallback(const ros::TimerEvent &event);
   void markerCallback(const geometry_msgs::PoseStamped &msg);
@@ -234,16 +245,16 @@ class geometricCtrl {
   bool ctrltriggerCallback(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res);
   bool landCallback(std_srvs::SetBool::Request &request, std_srvs::SetBool::Response &response);
   bool almostZero(double value);
-  void ascending_thrust();
   void yawPlannerCallback(const ros::TimerEvent &event);
   int check_cross();
   geometry_msgs::PoseStamped vector3d2PoseStampedMsg(Eigen::Vector3d &position, Eigen::Vector4d &orientation);
   void computeBodyRateCmd(Eigen::Vector4d &bodyrate_cmd, const Eigen::Vector3d &target_acc);
   void computeLoadQuatCmd(const Eigen::Vector3d &target_acc);
   void computeCableCmd(Eigen::Vector3d &load_target_acc);
-  double ToEulerYaw(const Eigen::Quaterniond& q); 
+  double ToEulerYaw(const Eigen::Quaterniond& q);
   Eigen::Vector3d controlPosition(const Eigen::Vector3d &target_pos, const Eigen::Vector3d &target_vel,
                                   const Eigen::Vector3d &target_acc);
+  double controlyawvel();
   Eigen::Vector3d controlMarker();
   Eigen::Vector3d control_Load_Position(const Eigen::Vector3d &target_pos, const Eigen::Vector3d &target_vel,
                                   const Eigen::Vector3d &target_acc);
@@ -258,8 +269,8 @@ class geometricCtrl {
   Eigen::Vector3d computeRobustBodyXAxis(const Eigen::Vector3d& x_B_prototype, const Eigen::Vector3d& x_C,
     const Eigen::Vector3d& y_C,
     const Eigen::Quaterniond& attitude_estimate);
-  enum FlightState { WAITING_FOR_HOME_POSE, MISSION_EXECUTION, LANDING, LANDED, START,LOAD_MISSION} node_state;
-
+  enum FlightState { WAITING_FOR_HOME_POSE, MISSION_EXECUTION, LANDING, LANDED , TUNNING} node_state;
+  enum Controller_mask { ACCELERATION_FEEDBACK , ACCELERATION_FEEDBFORWARD, VELOCITY_CONTROL } control_mask ;
   template <class T>
   void waitForPredicate(const T *pred, const std::string &msg, double hz = 2.0) {
     ros::Rate pause(hz);

@@ -96,6 +96,7 @@ void PointCloudXyzNodelet::depthCb(const sensor_msgs::ImageConstPtr& depth_msg)
     ROS_ERROR("Depth image has unsupported encoding [%s]", depth_msg->encoding.c_str());
     return;
   }
+  cloud_msg->header.frame_id ="camera_link";
   pub_point_cloud_.publish (cloud_msg);
 }
 

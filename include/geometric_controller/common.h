@@ -98,6 +98,11 @@ inline double sinc ( double x )
     return 1;
   return sin ( x ) / ( x );
 }
+double sign ( double x ){
+  if( x > 0 ) return 1.0;
+  if( x < 0 ) return -1.0;
+  if( x = 0 ) return 0 ;
+}
 geometry_msgs::Quaternion toGeometry_msgs( Eigen::Vector3d v , double w){
   geometry_msgs::Quaternion q;
   q.w = w;
@@ -143,6 +148,21 @@ inline Eigen::Vector3d toEigen(const geometry_msgs::Vector3 &v3) {
   Eigen::Vector3d ev3(v3.x, v3.y, v3.z);
   return ev3;
 }
+inline geometry_msgs::Vector3 toVector3(const Eigen::Vector3d &ev3) {
+  geometry_msgs::Vector3 v3;
+  v3.x = ev3(0);
+  v3.y = ev3(1);
+  v3.z = ev3(2);
+  return v3;
+}
+inline geometry_msgs::Point toVector3(const geometry_msgs::Vector3 &v3) {
+  geometry_msgs::Point p3;
+  p3.x = v3.x;
+  p3.y = v3.y;
+  p3.z = v3.z;
+  return p3;
+}
+
 
 Eigen::Vector4d quatMultiplication(const Eigen::Vector4d &q, const Eigen::Vector4d &p) {
   Eigen::Vector4d quat;
@@ -156,6 +176,54 @@ double H2Vratio(Eigen::Vector3d v){
 double H2VCoeff(Eigen::Vector3d v){
   return (-0.5 / log(H2Vratio(v)+1.8) + 0.5);
 } 
+double findLastAverage(std::deque<double>& signal, int n)
+{ 
+  if (signal.size() < n) return 1000;
+  else{
+    double sum = 0;
+    for (int i = 0; i < n; i++)
+  {
+    sum+= signal.at(signal.size()-1-i);
+
+  }
+  return sum/n;
+  }
+}
+double findLastVariance(std::deque<double>& signal, int n , double mean )
+{ 
+  if (signal.size() < n) return 1000;
+  else{
+    double sum = 0;
+    for (int i = 0; i < n; i++)
+  {
+    sum+= (signal.at(signal.size()-1-i) - mean)* (signal.at(signal.size()-1-i) - mean);
+  }
+  return sqrt(sum/n);
+  }
+}
+int findPeak(std::deque<double>& signal)
+{ 
+  if (signal.size() < 21) return -2;
+  else{
+  bool min = true ,max =true ;
+
+  for (int i = 0; i < 21; i++)
+  {
+    if (signal[i] < signal[10])
+    {
+      min = false ;
+    }
+    if (signal[i] > signal[10])
+    {
+      max = false ;
+    }
+  }
+  signal.pop_front();
+  if(min == true) return -1 ;
+  else if(max == true) return 1 ;
+  else return 0 ;
+  }
+}
 
 Eigen::Vector3d reScaleMax(Eigen::Vector3d v, double nml){
 return v / std::max(v.norm()/nml,1.0);
@@ -163,6 +231,13 @@ return v / std::max(v.norm()/nml,1.0);
 double reScaleMax(double v, double nml){
 return std::max(v , nml);
 }
+void integral_handle(Eigen::Vector3d &integral, Eigen::Vector3d error, double dt, Eigen::Vector3d ki_coeff ,double rescale){
+if(dt > 0.05) dt =0;
+Eigen::Vector3d integral_update = dt * ki_coeff.cwiseProduct(error);
+integral += integral_update;
+integral = reScaleMax( integral, rescale);
+}
+
 void integral_handle(Eigen::Vector3d &integral, Eigen::Vector3d error, double dt, double ki_coeff ,double turn_head_coeff ,double rescale){
 
 Eigen::Vector3d weight = integral.cwiseProduct(error);
@@ -182,6 +257,7 @@ if(dt > 0.05) dt =0;
 double integral_update = dt * weight * error;
 integral += integral_update;
 integral = integral / std::max(1.0,fabs(integral)/rescale);
+// ROS_INFO_STREAM("integral " << integral << " " << fabs(integral)/rescale << " = " << std::max(1.0,fabs(integral)/rescale));
 }
 void discrete_integral_handle(double &integral, double error, double dt, double ki_coeff ,double turn_head_coeff ,double rescale){
 double weight = integral *error ;
